@@ -31,7 +31,10 @@ Override via `fleet-api/.env`: `ADMIN_*`, `DEMO_SM_EMAIL`, `DEMO_SM_PASSWORD`.
 ```bash
 mysql -h 127.0.0.1 -P 3307 -u root -p < fleet-db/init-database.sql
 mysql -h 127.0.0.1 -P 3307 -u root -p btt_fleet < fleet-db/schema.sql
+mysql -h 127.0.0.1 -P 3307 -u root -p btt_fleet < fleet-db/migration_002_indent_serial_batches.sql
 ```
+
+**Existing database?** If you already had `btt_fleet` before indent-series support, apply only the migration file above (safe to re-run: `CREATE TABLE IF NOT EXISTS`).
 
 Create app user if needed:
 
@@ -48,6 +51,7 @@ docker compose -f docker-compose.fleet.yml up -d
 # wait ~20s, then:
 mysql -h 127.0.0.1 -P 3308 -u root -pbtt-fleet-root-local < fleet-db/init-database.sql
 mysql -h 127.0.0.1 -P 3308 -u root -pbtt-fleet-root-local btt_fleet < fleet-db/schema.sql
+mysql -h 127.0.0.1 -P 3308 -u root -pbtt-fleet-root-local btt_fleet < fleet-db/migration_002_indent_serial_batches.sql
 ```
 
 Grant `btt` on `btt_fleet` as above, then set `DATABASE_URL=mysql://btt:btt@127.0.0.1:3308/btt_fleet` in `fleet-api/.env`.
@@ -80,12 +84,14 @@ npm run dev
 - App: **http://localhost:5174/**  
 - Owner payment page: **http://localhost:5174/pay/{token}** (token from Admin → Payments after Excel upload).
 
+**Use this UI (`fleet-web`), not** the legacy `frontend/` folder. The Vite dev server proxies `/api` → `http://127.0.0.1:4000`; a production build needs the same `/api` reverse-proxy to `fleet-api`.
+
 ---
 
 ## Proposal coverage (summary)
 
-- **Admin:** clients, site managers, vehicles, indents, fuel recon (Excel), payments (Excel + WhatsApp **stub**), dashboard + mismatch alerts.  
-- **Site manager:** issue indent (serial, amount, photo), **30-day vehicle indent history** safeguard, my indents.  
+- **Admin:** clients, site managers, vehicles, indents, **Indent series** (assign serial ranges like CBL0001–CBL0100 to a site manager), fuel recon (Excel), payments (Excel + WhatsApp **stub**), dashboard + mismatch alerts.  
+- **Site manager:** issue indent (serial from **admin-issued pool** only, amount, photo), **30-day vehicle indent history** safeguard, my indents.  
 - **Vehicle owner:** magic link payment breakdown + **viewed** timestamp + query to accounts.  
 
 WhatsApp: replace `fleet-api/src/services/whatsapp.js` with Twilio/Meta integration.

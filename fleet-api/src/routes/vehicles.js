@@ -1,62 +1,151 @@
 import { Router } from "express";
 import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin, requireSiteManager } from "../middleware/auth.js";
+import { normalizeVehicleRegistration } from "../utils/vehicleReg.js";
+
+const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name,
+  (SELECT GROUP_CONCAT(u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM vehicle_site_managers vsm
+    JOIN site_managers sm ON sm.id = vsm.site_manager_id
+    JOIN users u ON u.id = sm.user_id WHERE vsm.vehicle_id = v.id) AS site_manager_names,
+  (SELECT MIN(vsm2.site_manager_id) FROM vehicle_site_managers vsm2 WHERE vsm2.vehicle_id = v.id) AS site_manager_id
+ FROM vehicles v JOIN clients c ON c.id = v.client_id`;
 
 const admin = Router();
 admin.use(requireAuth, requireAdmin);
 
 admin.get("/", async (_req, res) => {
-  const rows = await query(
-    `SELECT v.*, c.name AS client_name,
-      (SELECT GROUP_CONCAT(u.full_name) FROM vehicle_site_managers vsm
-        JOIN site_managers sm ON sm.id = vsm.site_manager_id
-        JOIN users u ON u.id = sm.user_id WHERE vsm.vehicle_id = v.id) AS site_manager_names
-     FROM vehicles v JOIN clients c ON c.id = v.client_id ORDER BY v.id DESC`
-  );
+  const rows = await query(`${VEHICLE_ADMIN_ROW} ORDER BY v.id DESC`);
   res.json(rows);
 });
 
-admin.post("/", async (req, res) => {
-  const { client_id, registration_number, owner_name, owner_phone, notes, site_manager_ids } =
-    req.body || {};
-  if (!client_id || !registration_number) {
-    return res.status(400).json({ error: "client_id and registration_number required" });
-  }
-  const reg = String(registration_number).trim().toUpperCase();
-  const result = await execute(
-    "INSERT INTO vehicles (client_id, registration_number, owner_name, owner_phone, notes) VALUES (?,?,?,?,?)",
-    [client_id, reg, owner_name || null, owner_phone || null, notes || null]
-  );
-  const vid = result.insertId;
-  if (Array.isArray(site_manager_ids)) {
-    for (const smid of site_manager_ids) {
-      await execute(
-        "INSERT IGNORE INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)",
-        [vid, smid]
-      );
+async function assertSmBelongsToClient(siteManagerIds, clientId) {
+  for (const smid of siteManagerIds) {
+    const sm = await queryOne("SELECT id, client_id FROM site_managers WHERE id = ?", [smid]);
+    if (!sm) return { error: "Site manager not found", status: 404 };
+    if (Number(sm.client_id) !== Number(clientId)) {
+      return { error: "Site manager must belong to the selected client", status: 400 };
     }
   }
-  const row = await queryOne("SELECT * FROM vehicles WHERE id = ?", [vid]);
+  return null;
+}
+
+admin.post("/", async (req, res) => {
+  const { client_id, registration_number, owner_name, owner_phone, notes, site_manager_id, site_manager_ids } =
+    req.body || {};
+  if (!client_id) {
+    return res.status(400).json({ error: "client_id required" });
+  }
+  const cid = Number(client_id);
+  if (registration_number == null || String(registration_number).trim() === "") {
+    return res.status(400).json({ error: "Vehicle registration is required" });
+  }
+  const reg = normalizeVehicleRegistration(registration_number);
+  if (!reg) {
+    return res.status(400).json({
+      error:
+        "Invalid vehicle number. Examples: KA-01-MM-0001, KA 01 MM 0001, KA-01-0001 (no series), or KA01MM0001",
+    });
+  }
+  const dup = await queryOne(
+    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ?",
+    [cid, reg]
+  );
+  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+
+  let smIds = [];
+  if (site_manager_id != null && site_manager_id !== "") {
+    smIds = [Number(site_manager_id)];
+  } else if (Array.isArray(site_manager_ids)) {
+    smIds = site_manager_ids.map(Number).filter(Boolean);
+  }
+
+  const smErr = await assertSmBelongsToClient(smIds, cid);
+  if (smErr) return res.status(smErr.status).json({ error: smErr.error });
+
+  const result = await execute(
+    "INSERT INTO vehicles (client_id, registration_number, owner_name, owner_phone, notes) VALUES (?,?,?,?,?)",
+    [cid, reg, owner_name || null, owner_phone || null, notes || null]
+  );
+  const vid = result.insertId;
+  for (const smid of smIds) {
+    await execute(
+      "INSERT IGNORE INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)",
+      [vid, smid]
+    );
+  }
+  const row = await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [vid]);
   res.status(201).json(row);
 });
 
 admin.patch("/:id", async (req, res) => {
-  const { owner_name, owner_phone, notes, site_manager_ids } = req.body || {};
-  await execute(
-    "UPDATE vehicles SET owner_name = COALESCE(?, owner_name), owner_phone = COALESCE(?, owner_phone), notes = COALESCE(?, notes) WHERE id = ?",
-    [owner_name ?? null, owner_phone ?? null, notes ?? null, req.params.id]
+  const id = req.params.id;
+  const existing = await queryOne("SELECT * FROM vehicles WHERE id = ?", [id]);
+  if (!existing) return res.status(404).json({ error: "Not found" });
+
+  const body = req.body || {};
+  let client_id = existing.client_id;
+  let registration_number = existing.registration_number;
+
+  if (body.client_id !== undefined && body.client_id !== null && body.client_id !== "") {
+    client_id = Number(body.client_id);
+  }
+
+  if (
+    body.registration_number !== undefined &&
+    body.registration_number !== null &&
+    String(body.registration_number).trim() !== ""
+  ) {
+    const reg = normalizeVehicleRegistration(body.registration_number);
+    if (!reg) {
+      return res.status(400).json({
+        error:
+          "Invalid vehicle number. Examples: KA-01-MM-0001, KA-01-0001, or KA01MM0001",
+      });
+    }
+    registration_number = reg;
+  }
+
+  const dup = await queryOne(
+    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ? AND id <> ?",
+    [client_id, registration_number, id]
   );
-  if (Array.isArray(site_manager_ids)) {
-    await execute("DELETE FROM vehicle_site_managers WHERE vehicle_id = ?", [req.params.id]);
-    for (const smid of site_manager_ids) {
+  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+
+  let owner_name = existing.owner_name;
+  let owner_phone = existing.owner_phone;
+  let notes = existing.notes;
+  if ("owner_name" in body) owner_name = body.owner_name ? String(body.owner_name) : null;
+  if ("owner_phone" in body) owner_phone = body.owner_phone ? String(body.owner_phone) : null;
+  if ("notes" in body) notes = body.notes ? String(body.notes) : null;
+
+  await execute(
+    "UPDATE vehicles SET client_id = ?, registration_number = ?, owner_name = ?, owner_phone = ?, notes = ? WHERE id = ?",
+    [client_id, registration_number, owner_name, owner_phone, notes, id]
+  );
+
+  const assignSm =
+    Object.prototype.hasOwnProperty.call(body, "site_manager_id") ||
+    Array.isArray(body.site_manager_ids);
+
+  if (assignSm) {
+    await execute("DELETE FROM vehicle_site_managers WHERE vehicle_id = ?", [id]);
+    let smIds = [];
+    if (body.site_manager_id != null && body.site_manager_id !== "") {
+      smIds = [Number(body.site_manager_id)];
+    } else if (Array.isArray(body.site_manager_ids)) {
+      smIds = body.site_manager_ids.map(Number).filter(Boolean);
+    }
+    const smErr = await assertSmBelongsToClient(smIds, client_id);
+    if (smErr) return res.status(smErr.status).json({ error: smErr.error });
+    for (const smid of smIds) {
       await execute(
         "INSERT INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)",
-        [req.params.id, smid]
+        [id, smid]
       );
     }
   }
-  const row = await queryOne("SELECT * FROM vehicles WHERE id = ?", [req.params.id]);
-  if (!row) return res.status(404).json({ error: "Not found" });
+
+  const row = await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [id]);
   res.json(row);
 });
 

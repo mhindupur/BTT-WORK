@@ -1,5 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import {
+  buildRegistrationFromParts,
+  normalizeVehicleRegistration,
+  parseRegistrationToParts,
+} from "../../utils/vehicleReg";
+
+const emptyRegParts = () => ({
+  state: "KA",
+  district: "",
+  series: "",
+  number: "",
+});
 
 export default function AdminVehicles() {
   const [rows, setRows] = useState([]);
@@ -7,11 +19,16 @@ export default function AdminVehicles() {
   const [managers, setManagers] = useState([]);
   const [form, setForm] = useState({
     client_id: "",
-    registration_number: "",
+    site_manager_id: "",
     owner_name: "",
     owner_phone: "",
-    site_manager_ids: [],
+    notes: "",
+    pasteHint: "",
+    ...emptyRegParts(),
   });
+  const [formErr, setFormErr] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [editErr, setEditErr] = useState("");
 
   async function load() {
     const [v, c, sm] = await Promise.all([
@@ -28,45 +45,150 @@ export default function AdminVehicles() {
     load().catch(console.error);
   }, []);
 
-  function toggleSm(id) {
-    const sid = Number(id);
-    setForm((f) => ({
-      ...f,
-      site_manager_ids: f.site_manager_ids.includes(sid)
-        ? f.site_manager_ids.filter((x) => x !== sid)
-        : [...f.site_manager_ids, sid],
-    }));
+  const managersForClient = useMemo(() => {
+    if (!form.client_id) return [];
+    return managers.filter((m) => String(m.client_id) === String(form.client_id));
+  }, [managers, form.client_id]);
+
+  const managersForEditClient = useMemo(() => {
+    if (!editing?.client_id) return [];
+    return managers.filter((m) => String(m.client_id) === String(editing.client_id));
+  }, [managers, editing?.client_id]);
+
+  function applyPasteToForm(paste, isEdit) {
+    const n = normalizeVehicleRegistration(paste);
+    if (!n) return false;
+    const p = parseRegistrationToParts(n);
+    if (p.unparsed) return false;
+    const patch = {
+      state: p.state,
+      district: p.district,
+      series: p.series || "",
+      number: p.number,
+      pasteHint: "",
+    };
+    if (isEdit) {
+      setEditing((e) => ({ ...e, ...patch }));
+    } else {
+      setForm((f) => ({ ...f, ...patch }));
+    }
+    return true;
+  }
+
+  function resolveRegistration(parts, pasteFallback) {
+    let reg = buildRegistrationFromParts(parts.state, parts.district, parts.series, parts.number);
+    if (!reg && pasteFallback?.trim()) {
+      reg = normalizeVehicleRegistration(pasteFallback);
+    }
+    return reg;
   }
 
   async function create(e) {
     e.preventDefault();
-    await api.post("/admin/vehicles", {
-      ...form,
-      client_id: Number(form.client_id),
-      site_manager_ids: form.site_manager_ids,
-    });
-    setForm({
-      client_id: "",
-      registration_number: "",
-      owner_name: "",
-      owner_phone: "",
-      site_manager_ids: [],
-    });
-    load();
+    setFormErr("");
+    const reg = resolveRegistration(form, form.pasteHint);
+    if (!reg) {
+      setFormErr(
+        "Enter state, district, and vehicle number (series optional), or paste a full number e.g. KA-01-MM-0001 or KA01MM0001."
+      );
+      return;
+    }
+    try {
+      await api.post("/admin/vehicles", {
+        client_id: Number(form.client_id),
+        registration_number: reg,
+        owner_name: form.owner_name || null,
+        owner_phone: form.owner_phone || null,
+        notes: form.notes || null,
+        site_manager_id: form.site_manager_id === "" ? null : Number(form.site_manager_id),
+      });
+      setForm({
+        client_id: "",
+        site_manager_id: "",
+        owner_name: "",
+        owner_phone: "",
+        notes: "",
+        pasteHint: "",
+        ...emptyRegParts(),
+      });
+      load();
+    } catch (ex) {
+      setFormErr(ex.response?.data?.error || ex.message);
+    }
   }
+
+  function openEdit(row) {
+    setEditErr("");
+    const p = parseRegistrationToParts(row.registration_number);
+    setEditing({
+      id: row.id,
+      client_id: String(row.client_id),
+      site_manager_id: row.site_manager_id != null ? String(row.site_manager_id) : "",
+      owner_name: row.owner_name || "",
+      owner_phone: row.owner_phone || "",
+      notes: row.notes || "",
+      pasteHint: p.unparsed ? row.registration_number : "",
+      state: p.unparsed ? "KA" : p.state,
+      district: p.unparsed ? "" : p.district,
+      series: p.unparsed ? "" : p.series || "",
+      number: p.unparsed ? "" : p.number,
+    });
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    setEditErr("");
+    const reg = resolveRegistration(editing, editing.pasteHint);
+    if (!reg) {
+      setEditErr(
+        "Enter state, district, and vehicle number (series optional), or paste a full number."
+      );
+      return;
+    }
+    try {
+      await api.patch(`/admin/vehicles/${editing.id}`, {
+        client_id: Number(editing.client_id),
+        registration_number: reg,
+        owner_name: editing.owner_name || null,
+        owner_phone: editing.owner_phone || null,
+        notes: editing.notes || null,
+        site_manager_id: editing.site_manager_id === "" ? null : Number(editing.site_manager_id),
+      });
+      setEditing(null);
+      load();
+    } catch (ex) {
+      setEditErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  const previewAdd = resolveRegistration(form, form.pasteHint);
+  const previewEdit = editing ? resolveRegistration(editing, editing.pasteHint) : null;
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-btt-navy mb-4">Vehicles</h1>
+
       <form
         onSubmit={create}
-        className="bg-white p-4 rounded-xl border border-slate-200 mb-6 space-y-3"
+        className="bg-white p-4 rounded-xl border border-slate-200 mb-6 space-y-4 shadow-sm"
       >
+        <p className="text-sm text-slate-600">
+          Vehicle number supports Indian-style plates: <strong>KA-01-MM-0001</strong> or without series{" "}
+          <strong>KA-01-0001</strong>. You can type parts below, or paste values like{" "}
+          <span className="font-mono">KA 01 MM 0001</span> / <span className="font-mono">KA01MM0001</span>.
+        </p>
+
         <div className="grid md:grid-cols-2 gap-3">
           <select
             className="border rounded-lg px-3 py-2"
             value={form.client_id}
-            onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                client_id: e.target.value,
+                site_manager_id: "",
+              })
+            }
             required
           >
             <option value="">Client *</option>
@@ -76,13 +198,88 @@ export default function AdminVehicles() {
               </option>
             ))}
           </select>
-          <input
+
+          <select
             className="border rounded-lg px-3 py-2"
-            placeholder="Registration *"
-            value={form.registration_number}
-            onChange={(e) => setForm({ ...form, registration_number: e.target.value })}
-            required
-          />
+            value={form.site_manager_id}
+            onChange={(e) => setForm({ ...form, site_manager_id: e.target.value })}
+            disabled={!form.client_id}
+          >
+            <option value="">Site manager (optional)</option>
+            {managersForClient.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.full_name} — {m.email}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/80 space-y-3">
+          <div className="text-sm font-medium text-slate-700">Vehicle number *</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">State (2 letters)</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2 font-mono uppercase"
+                maxLength={2}
+                value={form.state}
+                onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase().slice(0, 2) })}
+                placeholder="KA"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">District (2 digits)</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2 font-mono"
+                value={form.district}
+                onChange={(e) => setForm({ ...form, district: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+                placeholder="01"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Series (optional)</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2 font-mono uppercase"
+                value={form.series}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    series: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3),
+                  })
+                }
+                placeholder="MM"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Number (1–4 digits)</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2 font-mono"
+                value={form.number}
+                onChange={(e) => setForm({ ...form, number: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                placeholder="1"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Or paste full number</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2 font-mono"
+              value={form.pasteHint}
+              onChange={(e) => setForm({ ...form, pasteHint: e.target.value })}
+              onBlur={() => {
+                if (form.pasteHint.trim()) applyPasteToForm(form.pasteHint, false);
+              }}
+              placeholder="KA-01-MM-0001, KA01MM0001, KA-01-0001…"
+            />
+          </div>
+          {previewAdd && (
+            <p className="text-sm text-slate-700">
+              Stored as: <span className="font-mono font-semibold text-btt-navy">{previewAdd}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-3">
           <input
             className="border rounded-lg px-3 py-2"
             placeholder="Owner name"
@@ -96,33 +293,28 @@ export default function AdminVehicles() {
             onChange={(e) => setForm({ ...form, owner_phone: e.target.value })}
           />
         </div>
-        <div>
-          <div className="text-sm font-medium text-slate-700 mb-2">Assign site managers</div>
-          <div className="flex flex-wrap gap-2">
-            {managers.map((m) => (
-              <label key={m.id} className="flex items-center gap-1 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.site_manager_ids.includes(m.id)}
-                  onChange={() => toggleSm(m.id)}
-                />
-                {m.full_name}
-              </label>
-            ))}
-          </div>
-        </div>
-        <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4">
+        <input
+          className="border rounded-lg px-3 py-2 w-full"
+          placeholder="Notes (optional)"
+          value={form.notes}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+        />
+
+        {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
+        <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
           Add vehicle
         </button>
       </form>
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
               <th className="text-left p-3">Reg</th>
               <th className="text-left p-3">Client</th>
               <th className="text-left p-3">Owner</th>
-              <th className="text-left p-3">Site managers</th>
+              <th className="text-left p-3">Site manager</th>
+              <th className="text-left p-3 w-28"> </th>
             </tr>
           </thead>
           <tbody>
@@ -134,11 +326,166 @@ export default function AdminVehicles() {
                   {v.owner_name} {v.owner_phone ? `· ${v.owner_phone}` : ""}
                 </td>
                 <td className="p-3 text-slate-600">{v.site_manager_names || "—"}</td>
+                <td className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(v)}
+                    className="text-btt-navy font-medium hover:underline"
+                  >
+                    Edit
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+            <div className="flex justify-between items-start gap-2">
+              <h2 className="text-lg font-bold text-btt-navy">Edit vehicle</h2>
+              <button
+                type="button"
+                className="text-slate-500 hover:text-slate-800"
+                onClick={() => setEditing(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={saveEdit} className="space-y-4">
+              <select
+                className="w-full border rounded-lg px-3 py-2"
+                value={editing.client_id}
+                onChange={(e) =>
+                  setEditing({
+                    ...editing,
+                    client_id: e.target.value,
+                    site_manager_id: "",
+                  })
+                }
+                required
+              >
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="w-full border rounded-lg px-3 py-2"
+                value={editing.site_manager_id}
+                onChange={(e) => setEditing({ ...editing, site_manager_id: e.target.value })}
+                disabled={!editing.client_id}
+              >
+                <option value="">Site manager (optional)</option>
+                {managersForEditClient.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name} — {m.email}
+                  </option>
+                ))}
+              </select>
+
+              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="border rounded-lg px-2 py-2 font-mono uppercase text-sm"
+                    maxLength={2}
+                    value={editing.state}
+                    onChange={(e) =>
+                      setEditing({ ...editing, state: e.target.value.toUpperCase().slice(0, 2) })
+                    }
+                    placeholder="KA"
+                  />
+                  <input
+                    className="border rounded-lg px-2 py-2 font-mono text-sm"
+                    value={editing.district}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        district: e.target.value.replace(/\D/g, "").slice(0, 2),
+                      })
+                    }
+                    placeholder="01"
+                  />
+                  <input
+                    className="border rounded-lg px-2 py-2 font-mono uppercase text-sm"
+                    value={editing.series}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        series: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3),
+                      })
+                    }
+                    placeholder="MM (opt)"
+                  />
+                  <input
+                    className="border rounded-lg px-2 py-2 font-mono text-sm"
+                    value={editing.number}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        number: e.target.value.replace(/\D/g, "").slice(0, 4),
+                      })
+                    }
+                    placeholder="0001"
+                  />
+                </div>
+                <input
+                  className="w-full border rounded-lg px-2 py-2 font-mono text-sm"
+                  value={editing.pasteHint}
+                  onChange={(e) => setEditing({ ...editing, pasteHint: e.target.value })}
+                  onBlur={() => {
+                    if (editing.pasteHint.trim()) applyPasteToForm(editing.pasteHint, true);
+                  }}
+                  placeholder="Or paste full number"
+                />
+                {previewEdit && (
+                  <p className="text-xs text-slate-600">
+                    Stored as: <span className="font-mono font-semibold">{previewEdit}</span>
+                  </p>
+                )}
+              </div>
+
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                placeholder="Owner name"
+                value={editing.owner_name}
+                onChange={(e) => setEditing({ ...editing, owner_name: e.target.value })}
+              />
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                placeholder="Owner mobile"
+                value={editing.owner_phone}
+                onChange={(e) => setEditing({ ...editing, owner_phone: e.target.value })}
+              />
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                placeholder="Notes"
+                value={editing.notes}
+                onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+              />
+
+              {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg border border-slate-300"
+                  onClick={() => setEditing(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="px-4 py-2 rounded-lg bg-btt-navy text-white font-medium">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

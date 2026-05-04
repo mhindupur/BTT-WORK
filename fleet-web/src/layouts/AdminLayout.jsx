@@ -26,6 +26,9 @@ export default function AdminLayout() {
           <NavLink to="/admin/indents" className={linkCls}>
             Indents
           </NavLink>
+          <NavLink to="/admin/indent-series" className={linkCls}>
+            Indent series
+          </NavLink>
           <NavLink to="/admin/fuel" className={linkCls}>
             Fuel Recon
           </NavLink>

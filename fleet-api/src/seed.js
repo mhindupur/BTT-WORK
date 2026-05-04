@@ -79,6 +79,35 @@ async function main() {
     );
   }
   console.log("[seed] Vehicle", reg, "assigned to supervisor for indent demo.");
+
+  const adminUser = await queryOne("SELECT id FROM users WHERE email = ?", [adminEmail]);
+  const demoBatch = await queryOne(
+    "SELECT id FROM indent_serial_batches WHERE site_manager_id = ? AND description LIKE 'Demo seed%'",
+    [sm.id]
+  );
+  if (adminUser && !demoBatch) {
+    try {
+      const bres = await execute(
+        `INSERT INTO indent_serial_batches (site_manager_id, created_by, prefix, start_number, end_number, digit_width, description)
+         VALUES (?,?,?,?,?,?,?)`,
+        [sm.id, adminUser.id, "CBL", 1, 10, 4, "Demo seed: CBL0001–CBL0010 for supervisor"]
+      );
+      const bid = bres.insertId;
+      for (let n = 1; n <= 10; n++) {
+        const serial = `CBL${String(n).padStart(4, "0")}`;
+        await execute(
+          `INSERT INTO indent_serial_pool (batch_id, site_manager_id, serial_number) VALUES (?,?,?)`,
+          [bid, sm.id, serial]
+        );
+      }
+      console.log("[seed] Issued demo serials CBL0001–CBL0010 to supervisor (admin-issued pool).");
+    } catch (err) {
+      console.warn(
+        "[seed] Skipped demo indent series (apply fleet-db/migration_002_indent_serial_batches.sql if table missing):",
+        err.message
+      );
+    }
+  }
 }
 
 main().catch((e) => {

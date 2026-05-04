@@ -9,6 +9,8 @@ DROP TABLE IF EXISTS payment_lines;
 DROP TABLE IF EXISTS payment_batches;
 DROP TABLE IF EXISTS fuel_recon_lines;
 DROP TABLE IF EXISTS fuel_recon_uploads;
+DROP TABLE IF EXISTS indent_serial_pool;
+DROP TABLE IF EXISTS indent_serial_batches;
 DROP TABLE IF EXISTS indents;
 DROP TABLE IF EXISTS vehicle_site_managers;
 DROP TABLE IF EXISTS vehicles;
@@ -96,6 +98,38 @@ CREATE TABLE indents (
   KEY ix_indent_status (status),
   CONSTRAINT fk_ind_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id) ON DELETE RESTRICT,
   CONSTRAINT fk_ind_sm FOREIGN KEY (site_manager_id) REFERENCES site_managers (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Admin-issued serial ranges (e.g. CBL0001–CBL0100) assigned to one site manager
+CREATE TABLE indent_serial_batches (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  site_manager_id BIGINT UNSIGNED NOT NULL,
+  created_by BIGINT UNSIGNED NOT NULL,
+  prefix VARCHAR(32) NOT NULL,
+  start_number INT UNSIGNED NOT NULL,
+  end_number INT UNSIGNED NOT NULL,
+  digit_width TINYINT UNSIGNED NOT NULL DEFAULT 4,
+  description VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_isb_sm (site_manager_id),
+  CONSTRAINT fk_isb_sm FOREIGN KEY (site_manager_id) REFERENCES site_managers (id) ON DELETE CASCADE,
+  CONSTRAINT fk_isb_user FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE indent_serial_pool (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  batch_id BIGINT UNSIGNED NOT NULL,
+  site_manager_id BIGINT UNSIGNED NOT NULL,
+  serial_number VARCHAR(64) NOT NULL,
+  status ENUM('available', 'consumed', 'cancelled') NOT NULL DEFAULT 'available',
+  indent_id BIGINT UNSIGNED NULL,
+  consumed_at DATETIME NULL,
+  UNIQUE KEY uq_isp_serial (serial_number),
+  KEY ix_isp_sm_st (site_manager_id, status),
+  KEY ix_isp_batch (batch_id),
+  CONSTRAINT fk_isp_batch FOREIGN KEY (batch_id) REFERENCES indent_serial_batches (id) ON DELETE CASCADE,
+  CONSTRAINT fk_isp_sm FOREIGN KEY (site_manager_id) REFERENCES site_managers (id) ON DELETE CASCADE,
+  CONSTRAINT fk_isp_indent FOREIGN KEY (indent_id) REFERENCES indents (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE fuel_recon_uploads (

@@ -12,6 +12,7 @@ import { indentsAdmin, indentsSm } from "./routes/indents.js";
 import fuel from "./routes/fuel.js";
 import { paymentsAdmin, paymentsPublic } from "./routes/payments.js";
 import dashboard from "./routes/dashboard.js";
+import indentBatches from "./routes/indentBatches.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -38,6 +39,7 @@ app.use("/api/site-managers", siteManagers);
 app.use("/api/admin/vehicles", vehiclesAdmin);
 app.use("/api/sm/vehicles", vehiclesSm);
 app.use("/api/admin/indents", indentsAdmin);
+app.use("/api/admin/indent-batches", indentBatches);
 app.use("/api/sm/indents", indentsSm);
 app.use("/api/admin/fuel", fuel);
 app.use("/api/admin/payments", paymentsAdmin);

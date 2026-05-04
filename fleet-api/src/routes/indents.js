@@ -1,8 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import path from "path";
-import fs from "fs";
-import { query, queryOne, execute } from "../db.js";
+import { query, queryOne, execute, pool } from "../db.js";
 import { requireAuth, requireAdmin, requireSiteManager } from "../middleware/auth.js";
 
 const upload = multer({ dest: path.join(process.env.UPLOAD_DIR || "./uploads", "indents") });
@@ -36,6 +35,21 @@ admin.patch("/:id/status", async (req, res) => {
 const sm = Router();
 sm.use(requireAuth, requireSiteManager);
 
+/** Serials admin issued to this site manager that are still available */
+sm.get("/available-serials", async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const rows = await query(
+    `SELECT p.id, p.serial_number, p.batch_id, b.prefix, b.description AS batch_description
+     FROM indent_serial_pool p
+     JOIN indent_serial_batches b ON b.id = p.batch_id
+     WHERE p.site_manager_id = ? AND p.status = 'available'
+     ORDER BY p.serial_number`,
+    [smRow.id]
+  );
+  res.json(rows);
+});
+
 sm.get("/mine", async (req, res) => {
   const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
   if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
@@ -56,21 +70,53 @@ sm.post("/", upload.single("photo"), async (req, res) => {
   if (!serial_number || !vehicle_id || amount_rs == null) {
     return res.status(400).json({ error: "serial_number, vehicle_id, amount_rs required" });
   }
+  const serialNorm = String(serial_number).trim().toUpperCase();
+
   const access = await queryOne(
     "SELECT 1 FROM vehicle_site_managers WHERE vehicle_id = ? AND site_manager_id = ?",
     [vehicle_id, smRow.id]
   );
   if (!access) return res.status(403).json({ error: "Vehicle not assigned to you" });
-  const dup = await queryOne("SELECT id FROM indents WHERE serial_number = ?", [serial_number]);
-  if (dup) return res.status(409).json({ error: "Serial number already used" });
+
   const imagePath = req.file ? `/uploads/indents/${req.file.filename}` : null;
-  const result = await execute(
-    `INSERT INTO indents (serial_number, vehicle_id, site_manager_id, amount_rs, status, image_path)
-     VALUES (?,?,?,?, 'pending', ?)`,
-    [serial_number, vehicle_id, smRow.id, Number(amount_rs), imagePath]
-  );
-  const row = await queryOne("SELECT * FROM indents WHERE id = ?", [result.insertId]);
-  res.status(201).json(row);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [poolRows] = await conn.execute(
+      `SELECT id FROM indent_serial_pool
+       WHERE serial_number = ? AND site_manager_id = ? AND status = 'available' FOR UPDATE`,
+      [serialNorm, smRow.id]
+    );
+    if (!poolRows.length) {
+      await conn.rollback();
+      return res.status(400).json({
+        error:
+          "Serial is not in your admin-issued pool, or it was already used. Ask admin to assign a series (e.g. CBL0001–CBL0100).",
+      });
+    }
+    const poolRowId = poolRows[0].id;
+
+    const [insResult] = await conn.execute(
+      `INSERT INTO indents (serial_number, vehicle_id, site_manager_id, amount_rs, status, image_path)
+       VALUES (?,?,?,?, 'pending', ?)`,
+      [serialNorm, vehicle_id, smRow.id, Number(amount_rs), imagePath]
+    );
+    const indentId = insResult.insertId;
+
+    await conn.execute(
+      `UPDATE indent_serial_pool SET status = 'consumed', indent_id = ?, consumed_at = NOW() WHERE id = ?`,
+      [indentId, poolRowId]
+    );
+
+    await conn.commit();
+    const row = await queryOne("SELECT * FROM indents WHERE id = ?", [indentId]);
+    res.status(201).json(row);
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
 });
 
 export { admin as indentsAdmin, sm as indentsSm };

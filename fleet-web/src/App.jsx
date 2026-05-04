@@ -9,6 +9,7 @@ import AdminClients from "./pages/admin/Clients";
 import AdminSiteManagers from "./pages/admin/SiteManagers";
 import AdminVehicles from "./pages/admin/Vehicles";
 import AdminIndents from "./pages/admin/Indents";
+import AdminIndentSeries from "./pages/admin/IndentSeries";
 import AdminFuel from "./pages/admin/Fuel";
 import AdminPayments from "./pages/admin/Payments";
 import SmDashboard from "./pages/sm/SmDashboard";
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="site-managers" element={<AdminSiteManagers />} />
         <Route path="vehicles" element={<AdminVehicles />} />
         <Route path="indents" element={<AdminIndents />} />
+        <Route path="indent-series" element={<AdminIndentSeries />} />
         <Route path="fuel" element={<AdminFuel />} />
         <Route path="payments" element={<AdminPayments />} />
       </Route>
