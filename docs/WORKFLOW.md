@@ -306,7 +306,7 @@ The repository scaffold under `backend/` and `frontend/` matches Phase 1 boundar
 
 ## 11. Local run (scaffold)
 
-1. **MySQL:** create database `btt`, run `database/schema.sql`, then set `DATABASE_URL` / `database_url` in `backend/.env` (see `backend/app/config.py` defaults: `mysql+pymysql://btt:btt@127.0.0.1:3306/btt`).
+1. **MySQL (Docker, recommended):** from the repo root run `docker compose up -d`. The compose file maps **host port 3307 → container 3306** so it does not clash with an existing MySQL on `localhost:3306`. Load schema: `docker compose exec -T mysql mysql -uroot -pbtt-root-local-only btt < database/schema.sql`. Set `DATABASE_URL` in `backend/.env` to `mysql+pymysql://btt:btt@127.0.0.1:3307/btt` (matches defaults in `backend/app/config.py`). **Alternatively**, use your own MySQL on any port and adjust `DATABASE_URL` accordingly.
 2. **Backend:** `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
   - Swagger: `http://127.0.0.1:8000/docs`
   - Default admin (from env defaults): `admin@btt.local` / `Admin@123`
