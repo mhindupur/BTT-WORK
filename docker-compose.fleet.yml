@@ -1,0 +1,29 @@
+# Optional: dedicated MySQL for the Fleet & Fuel app (database: btt_fleet).
+# Host port 3308 avoids clashing with another MySQL on 3306/3307.
+#
+# Start: docker compose -f docker-compose.fleet.yml up -d
+# Then: mysql -h 127.0.0.1 -P 3308 -u root -pbtt-fleet-root-local < fleet-db/init-database.sql
+#       mysql -h 127.0.0.1 -P 3308 -u root -pbtt-fleet-root-local btt_fleet < fleet-db/schema.sql
+#       (create btt user GRANT as in docs/PROPOSAL-APP-README.md)
+#
+# fleet-api .env: DATABASE_URL=mysql://btt:btt@127.0.0.1:3308/btt_fleet
+
+services:
+  mysql-fleet:
+    image: mysql:8.4
+    container_name: btt-fleet-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: btt_fleet
+      MYSQL_USER: btt
+      MYSQL_PASSWORD: btt
+      MYSQL_ROOT_PASSWORD: btt-fleet-root-local
+    ports:
+      - "3308:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pbtt-fleet-root-local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
