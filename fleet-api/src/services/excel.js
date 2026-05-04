@@ -52,7 +52,9 @@ export function paymentRowMap(r) {
   return {
     vehicle_registration: rowVehicleReg(r),
     owner_name: cell(r, "owner_name", "owner", "driver_name", "name"),
-    owner_mobile: String(cell(r, "mobile", "phone", "owner_mobile", "contact") || "").replace(/\s/g, ""),
+    owner_mobile: String(
+      cell(r, "mobile", "phone", "owner_mobile", "contact", "phone_number", "whatsapp") || ""
+    ).replace(/\s/g, ""),
     trip_count: cell(r, "trip_count", "trips", "no_of_trips", "no of trips")
       ? Number(cell(r, "trip_count", "trips", "no_of_trips", "no of trips"))
       : null,
