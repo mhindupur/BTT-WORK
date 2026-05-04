@@ -1,9 +1,21 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    """Use plain str for email: EmailStr rejects dev TLDs like `.local` (RFC special-use)."""
+    email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def email_shape(cls, v: str) -> str:
+        s = v.strip()
+        if "@" not in s or s.startswith("@") or s.endswith("@") or ".." in s:
+            raise ValueError("Invalid email format")
+        local, _, domain = s.partition("@")
+        if not local or not domain:
+            raise ValueError("Invalid email format")
+        return s
 
 
 class TokenResponse(BaseModel):
