@@ -3,14 +3,24 @@
  *
  * WHATSAPP_PROVIDER: stub | interakt | meta
  *
- * Interakt (template): set INTERAKT_API_KEY, INTERAKT_TEMPLATE_NAME.
+ * Interakt (template): set INTERAKT_TEMPLATE_NAME and either INTERAKT_API_KEY or INTERAKT_AUTHORIZATION (full header).
  *   Optional: INTERAKT_API_URL (default https://api.interakt.ai/v1/public/message/),
- *   INTERAKT_TEMPLATE_LANG (default en), INTERAKT_AUTH_MODE=basic|bearer (default basic).
+ *   INTERAKT_TEMPLATE_LANG — must match the approved template language in Meta (e.g. en, en_US),
+ *   INTERAKT_AUTH_MODE=basic|bearer (default basic, ignored if INTERAKT_AUTHORIZATION set).
+ *
+ * Approved template shape (one body variable {{1}} = full payment URL), e.g. name test_invoice_template:
+ *   Hello,
+ *   Your trip settlement for this period is available online.
+ *   Tap the link below to see your payment breakdown:
+ *   {{1}}
+ *   If you have questions, use the query option on that page.
+ *   — BTT Fleet
+ *
+ * Code sends: template.bodyValues = [ <https://…/pay/{token}> ] → fills {{1}} only.
  *
  * Meta Cloud API (template): set META_WHATSAPP_PHONE_NUMBER_ID, META_WHATSAPP_ACCESS_TOKEN,
  *   META_WHATSAPP_TEMPLATE_NAME. Optional META_WHATSAPP_TEMPLATE_LANG (default en).
- *
- * Templates should expose one body variable: the payment URL (or adjust components in Meta dashboard).
+ *   Same rule: one body parameter = payment URL.
  */
 
 function normalizeWhatsAppDigits(raw) {
@@ -44,16 +54,20 @@ function interaktAuthHeader() {
 }
 
 async function sendInterakt(toDigits, url, meta) {
-  const apiKey = process.env.INTERAKT_API_KEY;
-  const templateName = process.env.INTERAKT_TEMPLATE_NAME;
+  const templateName = (process.env.INTERAKT_TEMPLATE_NAME || "").trim();
+  const hasAuth = !!(process.env.INTERAKT_API_KEY || process.env.INTERAKT_AUTHORIZATION);
   const endpoint =
     process.env.INTERAKT_API_URL || "https://api.interakt.ai/v1/public/message/";
-  if (!apiKey || !templateName) {
-    console.error("[WhatsApp Interakt] Missing INTERAKT_API_KEY or INTERAKT_TEMPLATE_NAME");
+  if (!hasAuth || !templateName) {
+    console.error(
+      "[WhatsApp Interakt] Set INTERAKT_TEMPLATE_NAME and INTERAKT_API_KEY or INTERAKT_AUTHORIZATION in .env"
+    );
     return { ok: false, error: "interakt_not_configured" };
   }
   const { countryCode, phoneNumber } = splitIndia91(toDigits);
-  const lang = process.env.INTERAKT_TEMPLATE_LANG || "en";
+  const lang = (process.env.INTERAKT_TEMPLATE_LANG || "en").trim();
+  /** Single {{1}} in template = tappable payment link (must be https in production for Meta). */
+  const linkText = String(url || "").trim();
   const body = {
     countryCode,
     phoneNumber,
@@ -62,7 +76,7 @@ async function sendInterakt(toDigits, url, meta) {
     template: {
       name: templateName,
       languageCode: lang,
-      bodyValues: [url],
+      bodyValues: [linkText],
     },
   };
   try {
@@ -76,8 +90,22 @@ async function sendInterakt(toDigits, url, meta) {
     });
     const text = await res.text();
     if (!res.ok) {
-      console.error("[WhatsApp Interakt] HTTP", res.status, text.slice(0, 500));
-      return { ok: false, error: `interakt_http_${res.status}` };
+      console.error("[WhatsApp Interakt] HTTP", res.status, text.slice(0, 800));
+      let errLabel = `interakt_http_${res.status}`;
+      try {
+        const j = JSON.parse(text);
+        const msg =
+          j.message ||
+          j.error?.message ||
+          j.error ||
+          j.errorMessage ||
+          (Array.isArray(j.errors) ? j.errors.map((e) => e.message || e).join("; ") : null);
+        if (msg) errLabel += `: ${String(msg).slice(0, 280)}`;
+      } catch {
+        const oneLine = text.replace(/\s+/g, " ").trim();
+        if (oneLine) errLabel += `: ${oneLine.slice(0, 280)}`;
+      }
+      return { ok: false, error: errLabel };
     }
     return { ok: true, detail: text.slice(0, 200) };
   } catch (e) {
@@ -110,7 +138,9 @@ async function sendMeta(toDigits, url, _meta) {
         template: {
           name: tpl,
           language: { code: lang },
-          components: [{ type: "body", parameters: [{ type: "text", text: url }] }],
+          components: [
+            { type: "body", parameters: [{ type: "text", text: String(url || "").trim() }] },
+          ],
         },
       }),
     });

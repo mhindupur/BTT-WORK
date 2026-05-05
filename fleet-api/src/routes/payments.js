@@ -5,6 +5,7 @@ import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { parseSheetRows, paymentRowMap } from "../services/excel.js";
 import { sendPaymentLinkWhatsApp } from "../services/whatsapp.js";
+import { getPaymentLinkBase } from "../config/publicUrls.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -15,7 +16,10 @@ admin.use(requireAuth, requireAdmin);
 admin.get("/whatsapp-config", (_req, res) => {
   const provider = (process.env.WHATSAPP_PROVIDER || "stub").toLowerCase();
   const interakt = {
-    configured: !!(process.env.INTERAKT_API_KEY && process.env.INTERAKT_TEMPLATE_NAME),
+    configured: !!(
+      (process.env.INTERAKT_API_KEY || process.env.INTERAKT_AUTHORIZATION) &&
+      process.env.INTERAKT_TEMPLATE_NAME
+    ),
     template: process.env.INTERAKT_TEMPLATE_NAME || null,
     api_url: process.env.INTERAKT_API_URL || "https://api.interakt.ai/v1/public/message/",
   };
@@ -28,9 +32,17 @@ admin.get("/whatsapp-config", (_req, res) => {
     template: process.env.META_WHATSAPP_TEMPLATE_NAME || null,
     phone_number_id_set: !!process.env.META_WHATSAPP_PHONE_NUMBER_ID,
   };
+  const paymentLinkBase = getPaymentLinkBase();
   res.json({
     provider,
-    public_web_origin: (process.env.PUBLIC_WEB_ORIGIN || "http://localhost:5174").replace(/\/$/, ""),
+    /** CORS / primary browser origin (may be comma-separated in env; first segment shown). */
+    public_web_origin: (process.env.PUBLIC_WEB_ORIGIN || "http://localhost:5174")
+      .split(",")[0]
+      .trim()
+      .replace(/\/$/, ""),
+    /** Base used for WhatsApp and payment links: {payment_link_base}/pay/{token} */
+    payment_link_base: paymentLinkBase,
+    payment_link_example: `${paymentLinkBase}/pay/00000000-0000-0000-0000-000000000000`,
     interakt,
     meta,
   });
@@ -45,7 +57,7 @@ admin.post("/uploads", upload.single("file"), async (req, res) => {
     [req.user.id, period_label, req.file.originalname]
   );
   const batchId = bres.insertId;
-  const base = (process.env.PUBLIC_WEB_ORIGIN || "http://localhost:5174").replace(/\/$/, "");
+  const base = getPaymentLinkBase();
   const provider = (process.env.WHATSAPP_PROVIDER || "stub").toLowerCase();
   let whatsapp_sent = 0;
   let whatsapp_failed = 0;

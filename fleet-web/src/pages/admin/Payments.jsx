@@ -74,10 +74,17 @@ export default function AdminPayments() {
           <strong>mobile number</strong> triggers a WhatsApp send (per{" "}
           <code className="bg-slate-100 px-1 rounded text-xs">WHATSAPP_PROVIDER</code> in{" "}
           <code className="bg-slate-100 px-1 rounded text-xs">fleet-api/.env</code>
-          ): <strong>stub</strong> (console only), <strong>interakt</strong>, or <strong>meta</strong> (Meta Cloud
-          API). Public link format:{" "}
-          <code className="bg-slate-100 px-1 rounded text-xs">/pay/&#123;token&#125;</code>
+          ): <strong>stub</strong> (console only), <strong>interakt</strong>, or <strong>meta</strong>. Links use{" "}
+          <code className="bg-slate-100 px-1 rounded text-xs">PAYMENT_PUBLIC_BASE_URL</code> from{" "}
+          <code className="bg-slate-100 px-1 rounded text-xs">fleet-api/.env</code> (e.g.{" "}
+          <code className="bg-slate-100 px-1 rounded text-xs">http://localhost:5174/pay/…</code> now; set your AWS URL
+          later).
         </p>
+        {waConfig?.payment_link_example && (
+          <p className="text-xs text-slate-500 mt-2 font-mono break-all">
+            Active link pattern: {waConfig.payment_link_example}
+          </p>
+        )}
       </div>
 
       {waConfig && (
@@ -101,7 +108,11 @@ export default function AdminPayments() {
           {waConfig.provider === "interakt" && (
             <p className="mt-2 text-slate-600">
               Interakt template configured:{" "}
-              <strong>{waConfig.interakt.configured ? "yes" : "no — set INTERAKT_API_KEY and INTERAKT_TEMPLATE_NAME"}</strong>
+              <strong>
+                {waConfig.interakt.configured
+                  ? "yes"
+                  : "no — set INTERAKT_TEMPLATE_NAME and API key or INTERAKT_AUTHORIZATION"}
+              </strong>
               {waConfig.interakt.template ? ` (${waConfig.interakt.template})` : ""}
             </p>
           )}
@@ -131,9 +142,17 @@ export default function AdminPayments() {
                 your Meta app (one body parameter = URL).
               </p>
               <p>
-                <strong>Public URL in messages:</strong>{" "}
-                <code className="bg-white px-1 rounded">{waConfig.public_web_origin}</code> — set{" "}
-                <code className="bg-white px-1 rounded">PUBLIC_WEB_ORIGIN</code> to your live web origin in production.
+                <strong>Payment link base (WhatsApp):</strong>{" "}
+                <code className="bg-white px-1 rounded break-all">{waConfig.payment_link_base}</code>
+                <br />
+                <span className="text-slate-600">Example: </span>
+                <code className="bg-white px-1 rounded text-xs break-all">{waConfig.payment_link_example}</code>
+              </p>
+              <p>
+                Configure in <code className="bg-white px-1 rounded">fleet-api/.env</code>:{" "}
+                <code className="bg-white px-1 rounded">PAYMENT_PUBLIC_BASE_URL</code> (links only; use{" "}
+                <code className="bg-white px-1 rounded">https://your-aws-domain.com</code> after EC2 deploy). If unset,
+                falls back to <code className="bg-white px-1 rounded">PUBLIC_WEB_ORIGIN</code> (CORS / admin UI origin).
               </p>
             </div>
           )}
