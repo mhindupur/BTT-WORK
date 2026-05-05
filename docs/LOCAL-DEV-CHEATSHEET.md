@@ -1,6 +1,9 @@
-# Local dev cheatsheet — MySQL, backend, frontend
+# Local dev cheatsheet
 
-Quick steps to run **Basaveshwara Tours & Travels (BTT)** on your machine.
+**Active stack:** `fleet-api` (Express), `fleet-web` (Vite/React), `fleet-db` (MySQL).  
+Full setup: [PROPOSAL-APP-README.md](./PROPOSAL-APP-README.md).
+
+Legacy `backend/` (FastAPI), `frontend/` (old MIS), and `database/` have been **removed** from this repo.
 
 ---
 
@@ -8,145 +11,40 @@ Quick steps to run **Basaveshwara Tours & Travels (BTT)** on your machine.
 
 | Tool | Purpose |
 |------|---------|
-| **Docker Desktop** (or Docker Engine) | MySQL in a container |
-| **Python 3.11+** (3.13 OK) | FastAPI backend |
-| **Node.js 18+** | React (Vite) frontend |
-
-Repo root = folder that contains `docker-compose.yml`, `backend/`, `frontend/`.
+| Docker (optional) | MySQL on host port **3307** via root `docker-compose.yml` |
+| Node.js 18+ | `fleet-api` and `fleet-web` |
 
 ---
 
-## 1. MySQL (Docker)
-
-From the **repo root**:
+## MySQL
 
 ```bash
 docker compose up -d
+# Load schema (first time / fresh DB):
+docker exec -i btt-mysql mysql -uroot -pbtt-root-local-only btt_fleet < fleet-db/schema.sql
+docker exec -i btt-mysql mysql -uroot -pbtt-root-local-only btt_fleet < fleet-db/migration_002_indent_serial_batches.sql
 ```
 
-Wait until healthy (about 15–30s), then **create tables** (first run, or after `docker compose down` without a volume):
+Configure `fleet-api/.env`: `DATABASE_URL=mysql://btt:btt@127.0.0.1:3307/btt_fleet` (adjust user/password as needed).
+
+---
+
+## API & web
 
 ```bash
-docker compose exec -T mysql mysql -uroot -pbtt-root-local-only btt < database/schema.sql
+cd fleet-api && npm install && cp .env.example .env  # edit .env
+npm run seed
+npm run dev   # http://127.0.0.1:4000
 ```
-
-### Connection summary
-
-| Item | Value |
-|------|--------|
-| Host | `127.0.0.1` |
-| Port | **`3307`** (host → container `3306`; avoids clash with Mac MySQL on `3306`) |
-| Database | `btt` |
-| App user | `btt` / `btt` |
-| Root (admin / fixes) | `root` / `btt-root-local-only` |
-
-**CLI example:**
 
 ```bash
-mysql -h 127.0.0.1 -P 3307 -u btt -p btt
-# password: btt
+cd fleet-web && npm install && npm run dev   # http://localhost:5174
 ```
 
-**Stop DB (optional):**
+---
+
+## Stop MySQL
 
 ```bash
 docker compose down
 ```
-
----
-
-## 2. Backend (FastAPI)
-
-```bash
-cd backend
-cp -n .env.example .env    # skip if .env already exists
-python3 -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-| URL | Use |
-|-----|-----|
-| API health | http://127.0.0.1:8000/api/health |
-| Swagger UI | http://127.0.0.1:8000/docs |
-
-**Important:** Use **`--reload`** in dev so code changes apply without a manual restart.
-
-`.env` must match Docker MySQL, e.g.:
-
-`DATABASE_URL=mysql+pymysql://btt:btt@127.0.0.1:3307/btt`
-
----
-
-## 3. Frontend (React + Vite)
-
-**New terminal** (keep backend running):
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-| URL | Use |
-|-----|-----|
-| App | http://localhost:5173/ |
-
-Vite proxies **`/api`** → `http://127.0.0.1:8000`, so the browser calls the same origin for API routes.
-
----
-
-## 4. Default admin login
-
-Use the **login** page:
-
-| Field | Default (from `.env` / `config`) |
-|--------|----------------------------------|
-| Email | `admin@btt.local` |
-| Password | `Admin@123` |
-
-Override in `backend/.env`: `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
-
----
-
-## 5. One-page order (copy-paste)
-
-```bash
-# Terminal 1 — DB
-cd /path/to/BTT-work-flow
-docker compose up -d
-sleep 20
-docker compose exec -T mysql mysql -uroot -pbtt-root-local-only btt < database/schema.sql
-
-# Terminal 2 — API
-cd /path/to/BTT-work-flow/backend
-cp -n .env.example .env
-source .venv/bin/activate  # or create venv + pip install first
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-
-# Terminal 3 — UI
-cd /path/to/BTT-work-flow/frontend
-npm install
-npm run dev
-```
-
-Then open **http://localhost:5173/** and sign in as admin.
-
----
-
-## 6. Troubleshooting
-
-| Problem | What to check |
-|---------|----------------|
-| `Access denied` for DB / API won’t start | App must use port **`3307`**, not `3306`, if another MySQL uses `3306`. |
-| Login 422 on `admin@btt.local` | Restart API; use **`--reload`**; ensure `LoginRequest` is not using strict `EmailStr` only (see latest `backend/app/schemas/auth.py`). |
-| Frontend can’t reach API | Backend on **8000**? Use **http://localhost:5173** (proxy). |
-| Empty DB after `docker compose down` | Compose has no named volume → data is in-container. Re-run **schema.sql** after a fresh `up`. |
-
----
-
-## 7. More detail
-
-See **`docs/WORKFLOW.md`** for architecture, APIs, and product flows.

@@ -1,7 +1,7 @@
 # BTT Fleet & Fuel Management — final app (from `BTT_Proposal_New.pptx`)
 
 **Branch:** `cursor/btt-fleet-proposal`  
-This is the **proposal-aligned** codebase. Legacy `backend/` (FastAPI) and `frontend/` (old MIS demo) are **not** part of this app.
+This is the **proposal-aligned** codebase. Legacy `backend/` / `frontend/` / `database/` have been **removed**; only the paths in the table below are maintained.
 
 | Layer | Path | Stack |
 |--------|------|--------|
@@ -84,7 +84,7 @@ npm run dev
 - App: **http://localhost:5174/**  
 - Owner payment page: **http://localhost:5174/pay/{token}** (token from Admin → Payments after Excel upload).
 
-**Use this UI (`fleet-web`), not** the legacy `frontend/` folder. The Vite dev server proxies `/api` → `http://127.0.0.1:4000`; a production build needs the same `/api` reverse-proxy to `fleet-api`.
+The Vite dev server proxies `/api` → `http://127.0.0.1:4000`; a production build needs the same `/api` reverse-proxy to `fleet-api`.
 
 ---
 

@@ -1,6 +1,8 @@
 # Basaveshwara Tours and Travels (BTT) — System Workflow
 
-Stack: **React (Vite)** · **FastAPI + OpenAPI/Swagger** · **MySQL**
+> **Note:** The **shipping** product in this repo is **fleet-api** + **fleet-web** + **fleet-db** (see [PROPOSAL-APP-README.md](./PROPOSAL-APP-README.md)). The FastAPI/React layout below is **historical**; those folders were removed.
+
+Stack (historical doc): **React (Vite)** · **FastAPI + OpenAPI/Swagger** · **MySQL**
 
 This document ties together **roles**, **screens**, **APIs**, **notifications**, and **background jobs**.
 
@@ -300,16 +302,14 @@ Indexes on foreign keys, `mis_requests(status, reporting_at)`, `payment_lines(pu
 2. **Phase 2:** Excel import, payment lines, public driver page, WhatsApp dispatch, queries + admin notification.
 3. **Phase 3:** MIS cron (2h rule), templates, reporting, attachments, full audit.
 
-The repository scaffold under `backend/` and `frontend/` matches Phase 1 boundaries so you can grow into 2 and 3 without rework.
+Implementation now lives under **`fleet-api`**, **`fleet-web`**, and **`fleet-db`** (see [PROPOSAL-APP-README.md](./PROPOSAL-APP-README.md) and [LOCAL-DEV-CHEATSHEET.md](./LOCAL-DEV-CHEATSHEET.md)).
 
 ---
 
-## 11. Local run (scaffold)
+## 11. Local run (current stack)
 
-1. **MySQL (Docker, recommended):** from the repo root run `docker compose up -d`. The compose file maps **host port 3307 → container 3306** so it does not clash with an existing MySQL on `localhost:3306`. Load schema: `docker compose exec -T mysql mysql -uroot -pbtt-root-local-only btt < database/schema.sql`. Set `DATABASE_URL` in `backend/.env` to `mysql+pymysql://btt:btt@127.0.0.1:3307/btt` (matches defaults in `backend/app/config.py`). **Alternatively**, use your own MySQL on any port and adjust `DATABASE_URL` accordingly.
-2. **Backend:** `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
-  - Swagger: `http://127.0.0.1:8000/docs`
-  - Default admin (from env defaults): `admin@btt.local` / `Admin@123`
-3. **Frontend:** `cd frontend && npm install && npm run dev` → `http://127.0.0.1:5173` (Vite proxies `/api` to port 8000).
-4. **Driver payment link:** after upload, open `GET /api/admin/accounts/batches/{id}/lines` in Swagger for `public_token`, then visit `/pay/{token}` on the frontend.
+1. **MySQL:** `docker compose up -d`, then load `fleet-db/schema.sql` and migrations into database **`btt_fleet`** (see cheatsheet).
+2. **API:** `cd fleet-api && npm run dev` → `http://127.0.0.1:4000`
+3. **Web:** `cd fleet-web && npm run dev` → `http://localhost:5174` (proxies `/api` to port 4000).
+4. **Owner payment link:** Admin → Payments; public page `/pay/{token}` on the same origin as `PUBLIC_WEB_ORIGIN` / `PAYMENT_PUBLIC_BASE_URL`.
 

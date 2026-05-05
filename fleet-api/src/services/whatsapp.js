@@ -183,8 +183,3 @@ export async function sendPaymentLinkWhatsApp(mobile, url, meta = {}) {
   console.warn("[WhatsApp] unknown WHATSAPP_PROVIDER:", provider);
   return { ok: false, error: "unknown_provider" };
 }
-
-/** @deprecated use sendPaymentLinkWhatsApp */
-export function logPaymentLink(mobile, url, meta = {}) {
-  sendPaymentLinkWhatsApp(mobile, url, meta).catch(() => {});
-}
