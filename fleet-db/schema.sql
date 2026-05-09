@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS fuel_recon_uploads;
 DROP TABLE IF EXISTS indent_serial_pool;
 DROP TABLE IF EXISTS indent_serial_batches;
 DROP TABLE IF EXISTS indents;
+DROP TABLE IF EXISTS password_reset_otps;
 DROP TABLE IF EXISTS vehicle_site_managers;
 DROP TABLE IF EXISTS vehicles;
 DROP TABLE IF EXISTS site_managers;
@@ -98,6 +99,22 @@ CREATE TABLE indents (
   KEY ix_indent_status (status),
   CONSTRAINT fk_ind_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id) ON DELETE RESTRICT,
   CONSTRAINT fk_ind_sm FOREIGN KEY (site_manager_id) REFERENCES site_managers (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OTP-based password reset for site managers (WhatsApp Authentication template)
+CREATE TABLE password_reset_otps (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  phone_e164 VARCHAR(32) NOT NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_pro_user (user_id),
+  KEY ix_pro_phone (phone_e164),
+  KEY ix_pro_exp (expires_at),
+  CONSTRAINT fk_pro_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Admin-issued serial ranges (e.g. CBL0001–CBL0100) assigned to one site manager
