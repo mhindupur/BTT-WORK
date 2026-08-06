@@ -3,6 +3,8 @@ import api from "../../api";
 import DocUploadCard from "../../components/DocUploadCard";
 import {
   APPROVAL_STATUS_LABEL,
+  OPTIONAL_DOC_SECTIONS,
+  PRIMARY_DOC_SECTIONS,
   VEHICLE_DOC_SECTIONS,
 } from "../../constants/vehicleDocs";
 
@@ -45,22 +47,16 @@ export default function SmVehicles() {
   const [expiryByType, setExpiryByType] = useState({});
   const [uploadingType, setUploadingType] = useState(null);
   const [docStep, setDocStep] = useState(0);
-  const [showOptional, setShowOptional] = useState(false);
+  const [includeOptional, setIncludeOptional] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [search, setSearch] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
-  const primarySections = useMemo(
-    () => VEHICLE_DOC_SECTIONS.filter((s) => s.recommended),
-    []
+  const activeSections = useMemo(
+    () => (includeOptional ? [...PRIMARY_DOC_SECTIONS, ...OPTIONAL_DOC_SECTIONS] : PRIMARY_DOC_SECTIONS),
+    [includeOptional]
   );
-  const optionalSections = useMemo(
-    () => VEHICLE_DOC_SECTIONS.filter((s) => !s.recommended),
-    []
-  );
-  const activeSections = showOptional
-    ? [...primarySections, ...optionalSections]
-    : primarySections;
 
   async function load() {
     const { data } = await api.get("/sm/vehicles/mine");
@@ -86,6 +82,7 @@ export default function SmVehicles() {
   useEffect(() => {
     loadDocs(selectedId).catch(console.error);
     setDocStep(0);
+    setIncludeOptional(false);
   }, [selectedId]);
 
   const selected = rows.find((r) => Number(r.id) === Number(selectedId));
@@ -115,17 +112,33 @@ export default function SmVehicles() {
     return map;
   }, [docs]);
 
-  const uploadedPrimary = primarySections.filter((s) => docsByType[s.type]).length;
-  const currentSection = activeSections[Math.min(docStep, activeSections.length - 1)];
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay = [
+        r.registration_number,
+        r.owner_name,
+        r.make_model,
+        r.vehicle_type_name,
+        r.approval_status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, search]);
 
-  // On open vehicle, jump to first missing / rejected recommended doc
+  const uploadedPrimary = PRIMARY_DOC_SECTIONS.filter((s) => docsByType[s.type]).length;
+  const currentSection = activeSections[Math.min(docStep, Math.max(activeSections.length - 1, 0))];
+
   useEffect(() => {
-    if (!selectedId || !docs.length && !activeSections.length) return;
+    if (!selectedId) return;
     const idx = activeSections.findIndex(
       (s) => !docsByType[s.type] || docsByType[s.type]?.status === "rejected"
     );
     setDocStep(idx >= 0 ? idx : 0);
-    // only when switching vehicle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -138,7 +151,7 @@ export default function SmVehicles() {
         ...form,
         vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
       });
-      setMsg(`Vehicle ${data.registration_number} saved. Upload documents one by one.`);
+      setMsg(`Vehicle ${data.registration_number} saved. Upload documents below.`);
       setForm(emptyForm);
       setSelectedId(data.id);
       setDocStep(0);
@@ -163,10 +176,9 @@ export default function SmVehicles() {
     if (exp) fd.append("expiry_date", exp);
     try {
       await api.post(`/sm/vehicles/${selectedId}/documents`, fd);
-      setMsg(`${section.title} saved. Tap Next for the following document.`);
+      setMsg(`${section.title} saved.`);
       await loadDocs(selectedId);
       await load();
-      // auto-advance after successful upload
       setDocStep((s) => Math.min(s + 1, activeSections.length - 1));
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
@@ -203,20 +215,121 @@ export default function SmVehicles() {
     }
   }
 
+  function renderUploadPanel() {
+    if (!selected || !currentSection) return null;
+    return (
+      <div className="mt-3 space-y-3 border-t border-amber-200 pt-3">
+        <div className="space-y-2">
+          <h3 className="text-base font-bold text-btt-navy">
+            Upload documents — {selected.registration_number}
+          </h3>
+          <p className="text-sm text-slate-600">
+            Document {docStep + 1} of {activeSections.length}. Finish one, then tap Next.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {activeSections.map((s, i) => {
+              const done = Boolean(docsByType[s.type]) && docsByType[s.type]?.status !== "rejected";
+              return (
+                <button
+                  key={s.type}
+                  type="button"
+                  onClick={() => setDocStep(i)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                    i === docStep
+                      ? "bg-btt-navy text-white border-btt-navy"
+                      : done
+                        ? "bg-green-100 text-green-800 border-green-300"
+                        : "bg-white text-slate-600 border-slate-200"
+                  }`}
+                >
+                  {done ? "✓ " : `${i + 1}. `}
+                  {s.title}
+                  {s.optional ? " (optional)" : ""}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-sm font-semibold text-slate-700">
+            Required docs: {uploadedPrimary}/{PRIMARY_DOC_SECTIONS.length}
+          </div>
+        </div>
+
+        <DocUploadCard
+          section={currentSection}
+          index={docStep + 1}
+          doc={docsByType[currentSection.type]}
+          expiryValue={expiryByType[currentSection.type] || ""}
+          onExpiryChange={(v) => setExpiryByType((prev) => ({ ...prev, [currentSection.type]: v }))}
+          onUpload={(file) => uploadForType(currentSection, file)}
+          onRemove={removeDoc}
+          canEdit={Boolean(canEditDocs)}
+          busy={uploadingType === currentSection.type}
+        />
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={docStep <= 0}
+            className="flex-1 py-3 rounded-xl border-2 border-slate-300 font-bold disabled:opacity-40 bg-white"
+            onClick={() => setDocStep((s) => Math.max(0, s - 1))}
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            disabled={docStep >= activeSections.length - 1}
+            className="flex-1 py-3 rounded-xl bg-btt-navy text-white font-bold disabled:opacity-40"
+            onClick={() => setDocStep((s) => Math.min(activeSections.length - 1, s + 1))}
+          >
+            Next
+          </button>
+        </div>
+
+        {!includeOptional && (
+          <button
+            type="button"
+            className="w-full py-2 text-sm font-semibold text-btt-accent"
+            onClick={() => {
+              setIncludeOptional(true);
+              setDocStep(PRIMARY_DOC_SECTIONS.length);
+            }}
+          >
+            + Add optional Other document
+          </button>
+        )}
+
+        {["draft", "rejected"].includes(selected.approval_status) && (
+          <button
+            type="button"
+            onClick={submitForApproval}
+            disabled={uploadedPrimary < 1}
+            className="w-full bg-btt-accent text-white rounded-xl py-3.5 text-base font-bold disabled:opacity-40"
+          >
+            Send to admin for approval
+          </button>
+        )}
+        {selected.approval_status === "pending_review" && (
+          <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            Waiting for admin approval.
+          </p>
+        )}
+        {selected.approval_status === "approved" && (
+          <p className="text-sm text-green-900 bg-green-50 border border-green-200 rounded-xl p-3">
+            Approved — ready for issue indent.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-btt-navy">Add vehicle</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Simple 3 steps. Upload <strong>one document at a time</strong>.
+          Select a vehicle, then upload documents underneath. Permit and vehicle photo are included. Other is optional.
         </p>
       </div>
-
-      <ol className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
-        <li className="rounded-xl bg-btt-navy text-white px-2 py-2 font-semibold text-center">1. Details</li>
-        <li className="rounded-xl bg-slate-200 text-slate-800 px-2 py-2 font-semibold text-center">2. Documents</li>
-        <li className="rounded-xl bg-slate-200 text-slate-800 px-2 py-2 font-semibold text-center">3. Send</li>
-      </ol>
 
       {err && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">{err}</div>}
       {msg && <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
@@ -284,155 +397,76 @@ export default function SmVehicles() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="p-3 border-b font-bold text-btt-navy flex justify-between items-center">
-          <span>My vehicles</span>
-          {selectedId ? (
-            <button
-              type="button"
-              className="text-xs font-semibold text-btt-accent"
-              onClick={() => {
-                setSelectedId(null);
-                setForm(emptyForm);
-              }}
-            >
-              + Add another
-            </button>
-          ) : null}
+        <div className="p-3 border-b space-y-2">
+          <div className="font-bold text-btt-navy flex justify-between items-center">
+            <span>My vehicles</span>
+            {selectedId ? (
+              <button
+                type="button"
+                className="text-xs font-semibold text-btt-accent"
+                onClick={() => {
+                  setSelectedId(null);
+                  setForm(emptyForm);
+                }}
+              >
+                + Add another
+              </button>
+            ) : null}
+          </div>
+          <input
+            className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm"
+            placeholder="Search vehicle number, owner, type…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
         <ul className="divide-y">
-          {rows.map((r) => (
-            <li key={r.id} className={`p-3 ${Number(selectedId) === Number(r.id) ? "bg-amber-50/70" : ""}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="font-bold text-btt-navy">{r.registration_number}</div>
-                  <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${STATUS_BADGE[r.approval_status]}`}>
-                    {APPROVAL_STATUS_LABEL[r.approval_status] || r.approval_status}
-                  </span>
+          {filteredRows.map((r) => {
+            const isOpen = Number(selectedId) === Number(r.id);
+            return (
+              <li key={r.id} className={`p-3 ${isOpen ? "bg-amber-50/80" : ""}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-btt-navy">{r.registration_number}</div>
+                    <span
+                      className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${STATUS_BADGE[r.approval_status]}`}
+                    >
+                      {APPROVAL_STATUS_LABEL[r.approval_status] || r.approval_status}
+                    </span>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {r.make_model || "—"} · {r.doc_count || 0} doc(s)
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`px-3 py-2 rounded-xl font-semibold text-sm ${
+                      isOpen ? "bg-slate-700 text-white" : "bg-btt-accent text-white"
+                    }`}
+                    onClick={() => {
+                      if (isOpen) {
+                        setSelectedId(null);
+                      } else {
+                        setSelectedId(r.id);
+                        setMsg("");
+                        setErr("");
+                        setDocStep(0);
+                      }
+                    }}
+                  >
+                    {isOpen ? "Hide uploads" : "Upload docs"}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="px-3 py-2 rounded-xl bg-btt-accent text-white font-semibold text-sm"
-                  onClick={() => {
-                    setSelectedId(r.id);
-                    setMsg("");
-                    setErr("");
-                    setDocStep(0);
-                  }}
-                >
-                  {Number(selectedId) === Number(r.id) ? "Uploading…" : "Upload docs"}
-                </button>
-              </div>
+                {isOpen ? renderUploadPanel() : null}
+              </li>
+            );
+          })}
+          {!filteredRows.length && (
+            <li className="p-4 text-slate-500 text-sm">
+              {rows.length ? "No vehicles match your search." : "No vehicles yet."}
             </li>
-          ))}
-          {!rows.length && <li className="p-4 text-slate-500 text-sm">No vehicles yet.</li>}
+          )}
         </ul>
       </div>
-
-      {selected && currentSection && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-            <h2 className="text-lg font-bold text-btt-navy">
-              Step 2 — Document {docStep + 1} of {activeSections.length}
-            </h2>
-            <p className="text-sm text-slate-600">
-              Only one document is shown. Finish it, then tap <strong>Next</strong>.
-            </p>
-
-            {/* Checklist pills */}
-            <div className="flex flex-wrap gap-1.5">
-              {activeSections.map((s, i) => {
-                const done = Boolean(docsByType[s.type]) && docsByType[s.type]?.status !== "rejected";
-                return (
-                  <button
-                    key={s.type}
-                    type="button"
-                    onClick={() => setDocStep(i)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                      i === docStep
-                        ? "bg-btt-navy text-white border-btt-navy"
-                        : done
-                          ? "bg-green-100 text-green-800 border-green-300"
-                          : "bg-slate-50 text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    {done ? "✓ " : `${i + 1}. `}
-                    {s.title}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="text-sm font-semibold text-slate-700">
-              Main docs: {uploadedPrimary}/{primarySections.length}
-            </div>
-          </div>
-
-          <DocUploadCard
-            section={currentSection}
-            index={docStep + 1}
-            doc={docsByType[currentSection.type]}
-            expiryValue={expiryByType[currentSection.type] || ""}
-            onExpiryChange={(v) => setExpiryByType((prev) => ({ ...prev, [currentSection.type]: v }))}
-            onUpload={(file) => uploadForType(currentSection, file)}
-            onRemove={removeDoc}
-            canEdit={Boolean(canEditDocs)}
-            busy={uploadingType === currentSection.type}
-          />
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={docStep <= 0}
-              className="flex-1 py-3 rounded-xl border-2 border-slate-300 font-bold disabled:opacity-40"
-              onClick={() => setDocStep((s) => Math.max(0, s - 1))}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              disabled={docStep >= activeSections.length - 1}
-              className="flex-1 py-3 rounded-xl bg-btt-navy text-white font-bold disabled:opacity-40"
-              onClick={() => setDocStep((s) => Math.min(activeSections.length - 1, s + 1))}
-            >
-              Next
-            </button>
-          </div>
-
-          {!showOptional && (
-            <button
-              type="button"
-              className="w-full py-2 text-sm font-semibold text-btt-accent"
-              onClick={() => {
-                setShowOptional(true);
-                setDocStep(primarySections.length);
-              }}
-            >
-              + Add optional docs (Permit / Photo / Other)
-            </button>
-          )}
-
-          {["draft", "rejected"].includes(selected.approval_status) && (
-            <button
-              type="button"
-              onClick={submitForApproval}
-              disabled={uploadedPrimary < 1}
-              className="w-full bg-btt-accent text-white rounded-xl py-4 text-base font-bold disabled:opacity-40"
-            >
-              Step 3 — Send to admin for approval
-            </button>
-          )}
-          {selected.approval_status === "pending_review" && (
-            <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-3">
-              Waiting for admin approval.
-            </p>
-          )}
-          {selected.approval_status === "approved" && (
-            <p className="text-sm text-green-900 bg-green-50 border border-green-200 rounded-xl p-3">
-              Approved — ready for issue indent.
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

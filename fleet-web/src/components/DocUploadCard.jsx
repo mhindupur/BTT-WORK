@@ -70,10 +70,15 @@ export default function DocUploadCard({
           {done ? "✓" : index}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base sm:text-lg font-bold text-btt-navy leading-tight">{section.title}</h3>
+          <h3 className="text-base sm:text-lg font-bold text-btt-navy leading-tight">
+            {section.title}
+            {section.optional ? (
+              <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
+            ) : null}
+          </h3>
           <p className="text-sm text-slate-600 mt-0.5">{section.short}</p>
           <p className="text-xs text-slate-500 mt-1">{section.help}</p>
-          {section.recommended && !hasFile && (
+          {section.recommended && !section.optional && !hasFile && (
             <p className="text-xs font-medium text-amber-800 mt-1">Recommended before submit</p>
           )}
         </div>

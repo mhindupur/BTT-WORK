@@ -16,6 +16,7 @@ export default function AdminVehicleApprovals() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [docReject, setDocReject] = useState(null); // { id, note }
+  const [search, setSearch] = useState("");
 
   async function load() {
     const [pending, notes] = await Promise.all([
@@ -39,6 +40,18 @@ export default function AdminVehicleApprovals() {
   }, [selectedId]);
 
   const selected = rows.find((r) => Number(r.id) === Number(selectedId));
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay = [r.registration_number, r.client_name, r.submitted_by_name, r.make_model, r.owner_name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, search]);
 
   const docsByType = useMemo(() => {
     const map = {};
@@ -139,9 +152,17 @@ export default function AdminVehicleApprovals() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b font-bold text-btt-navy">Waiting for your review</div>
+        <div className="p-4 border-b space-y-2">
+          <div className="font-bold text-btt-navy">Waiting for your review</div>
+          <input
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Search registration, client, site manager…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
         <ul className="divide-y">
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <li key={r.id} className={`p-4 ${Number(selectedId) === Number(r.id) ? "bg-amber-50/50" : ""}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -169,7 +190,11 @@ export default function AdminVehicleApprovals() {
               </div>
             </li>
           ))}
-          {!rows.length && <li className="p-4 text-slate-500 text-sm">No vehicles waiting.</li>}
+          {!filteredRows.length && (
+            <li className="p-4 text-slate-500 text-sm">
+              {rows.length ? "No vehicles match your search." : "No vehicles waiting."}
+            </li>
+          )}
         </ul>
       </div>
 
@@ -221,7 +246,9 @@ export default function AdminVehicleApprovals() {
                   key={section.type}
                   className={`rounded-2xl border-2 p-4 ${
                     !d
-                      ? "border-slate-200 bg-slate-50"
+                      ? section.optional
+                        ? "border-dashed border-slate-200 bg-white"
+                        : "border-slate-200 bg-slate-50"
                       : d.status === "approved"
                         ? "border-green-300 bg-green-50/50"
                         : d.status === "rejected"
@@ -231,7 +258,12 @@ export default function AdminVehicleApprovals() {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="font-bold text-btt-navy">{section.title}</div>
+                      <div className="font-bold text-btt-navy">
+                        {section.title}
+                        {section.optional ? (
+                          <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
+                        ) : null}
+                      </div>
                       <div className="text-xs text-slate-500">{section.short}</div>
                       {d ? (
                         <>
@@ -245,7 +277,9 @@ export default function AdminVehicleApprovals() {
                           ) : null}
                         </>
                       ) : (
-                        <div className="text-sm text-slate-500 mt-2">Not uploaded</div>
+                        <div className="text-sm text-slate-500 mt-2">
+                          {section.optional ? "Not uploaded (optional)" : "Not uploaded"}
+                        </div>
                       )}
                     </div>
                     {d && (

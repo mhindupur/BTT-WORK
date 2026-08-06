@@ -32,6 +32,7 @@ export default function AdminVehicles() {
   const [editing, setEditing] = useState(null);
   const [editErr, setEditErr] = useState("");
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [search, setSearch] = useState("");
 
   async function load() {
     const [v, c, sm, vt] = await Promise.all([
@@ -59,6 +60,27 @@ export default function AdminVehicles() {
     if (!editing?.client_id) return [];
     return managers.filter((m) => String(m.client_id) === String(editing.client_id));
   }, [managers, editing?.client_id]);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay = [
+        r.registration_number,
+        r.client_name,
+        r.owner_name,
+        r.owner_phone,
+        r.site_manager_names,
+        r.vehicle_type_name,
+        r.make_model,
+        r.approval_status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, search]);
 
   function applyPasteToForm(paste, isEdit) {
     const n = normalizeVehicleRegistration(paste);
@@ -343,9 +365,17 @@ export default function AdminVehicles() {
       </form>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="px-4 py-3 border-b bg-slate-50 text-xs text-slate-600">
-          Rows in <span className="font-semibold text-amber-800">amber</span> are waiting for document / vehicle
-          review.
+        <div className="px-4 py-3 border-b bg-slate-50 space-y-2">
+          <div className="text-xs text-slate-600">
+            Rows in <span className="font-semibold text-amber-800">amber</span> are waiting for document / vehicle
+            review.
+          </div>
+          <input
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Search registration, client, owner, type, status…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
@@ -360,7 +390,7 @@ export default function AdminVehicles() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((v) => {
+            {filteredRows.map((v) => {
               const pending = v.approval_status === "pending_review";
               const rejected = v.approval_status === "rejected";
               return (
@@ -427,6 +457,13 @@ export default function AdminVehicles() {
                 </tr>
               );
             })}
+            {!filteredRows.length && (
+              <tr>
+                <td colSpan={7} className="p-4 text-slate-500">
+                  {rows.length ? "No vehicles match your search." : "No vehicles yet."}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

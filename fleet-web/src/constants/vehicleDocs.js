@@ -7,6 +7,7 @@ export const VEHICLE_DOC_SECTIONS = [
     help: "Photo or PDF of the vehicle RC book.",
     needsExpiry: false,
     recommended: true,
+    optional: false,
   },
   {
     type: "INS",
@@ -16,6 +17,7 @@ export const VEHICLE_DOC_SECTIONS = [
     needsExpiry: true,
     vehicleDateField: "insurance_expiry",
     recommended: true,
+    optional: false,
   },
   {
     type: "FC",
@@ -25,6 +27,7 @@ export const VEHICLE_DOC_SECTIONS = [
     needsExpiry: true,
     vehicleDateField: "fitness_expiry",
     recommended: true,
+    optional: false,
   },
   {
     type: "PUC",
@@ -34,6 +37,7 @@ export const VEHICLE_DOC_SECTIONS = [
     needsExpiry: true,
     vehicleDateField: "puc_expiry",
     recommended: true,
+    optional: false,
   },
   {
     type: "TAX",
@@ -43,6 +47,7 @@ export const VEHICLE_DOC_SECTIONS = [
     needsExpiry: true,
     vehicleDateField: "tax_expiry",
     recommended: true,
+    optional: false,
   },
   {
     type: "PERMIT",
@@ -51,7 +56,8 @@ export const VEHICLE_DOC_SECTIONS = [
     help: "Upload permit and select expiry date.",
     needsExpiry: true,
     vehicleDateField: "permit_expiry",
-    recommended: false,
+    recommended: true,
+    optional: false,
   },
   {
     type: "VP",
@@ -59,17 +65,23 @@ export const VEHICLE_DOC_SECTIONS = [
     short: "Photo of vehicle",
     help: "Clear photo of the vehicle (number plate visible if possible).",
     needsExpiry: false,
-    recommended: false,
+    recommended: true,
+    optional: false,
   },
   {
     type: "OTHER",
     title: "Other document",
-    short: "Any other paper",
-    help: "Optional — any extra supporting document.",
+    short: "Any other paper (optional)",
+    help: "Optional — upload only if you have an extra supporting paper.",
     needsExpiry: false,
     recommended: false,
+    optional: true,
   },
 ];
+
+/** Docs site manager should walk through by default (includes Permit + Vehicle photo). */
+export const PRIMARY_DOC_SECTIONS = VEHICLE_DOC_SECTIONS.filter((s) => !s.optional);
+export const OPTIONAL_DOC_SECTIONS = VEHICLE_DOC_SECTIONS.filter((s) => s.optional);
 
 export const DOC_STATUS_LABEL = {
   pending: "Waiting for admin",
