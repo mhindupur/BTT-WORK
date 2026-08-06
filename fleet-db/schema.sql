@@ -13,6 +13,8 @@ DROP TABLE IF EXISTS indent_serial_pool;
 DROP TABLE IF EXISTS indent_serial_batches;
 DROP TABLE IF EXISTS indents;
 DROP TABLE IF EXISTS password_reset_otps;
+DROP TABLE IF EXISTS admin_notifications;
+DROP TABLE IF EXISTS vehicle_documents;
 DROP TABLE IF EXISTS vehicle_site_managers;
 DROP TABLE IF EXISTS vehicles;
 DROP TABLE IF EXISTS site_managers;
@@ -65,12 +67,64 @@ CREATE TABLE vehicles (
   registration_number VARCHAR(32) NOT NULL,
   owner_name VARCHAR(255) NULL,
   owner_phone VARCHAR(64) NULL,
+  make_model VARCHAR(255) NULL,
+  fuel_type VARCHAR(32) NULL,
+  insurance_expiry DATE NULL,
+  fitness_expiry DATE NULL,
+  puc_expiry DATE NULL,
+  tax_expiry DATE NULL,
+  permit_expiry DATE NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  -- Admin/seed default approved; SM submit flow uses draft → pending_review → approved|rejected
+  approval_status ENUM('draft','pending_review','approved','rejected') NOT NULL DEFAULT 'approved',
+  submitted_by_site_manager_id BIGINT UNSIGNED NULL,
+  submitted_at DATETIME NULL,
+  reviewed_by_user_id BIGINT UNSIGNED NULL,
+  reviewed_at DATETIME NULL,
+  rejection_note TEXT NULL,
   notes TEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_client_vehicle (client_id, registration_number),
   KEY ix_vehicles_reg (registration_number),
-  CONSTRAINT fk_veh_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
+  KEY ix_vehicles_approval (approval_status),
+  CONSTRAINT fk_veh_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE,
+  CONSTRAINT fk_veh_submitted_sm FOREIGN KEY (submitted_by_site_manager_id) REFERENCES site_managers (id) ON DELETE SET NULL,
+  CONSTRAINT fk_veh_reviewed_user FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE vehicle_documents (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  vehicle_id BIGINT UNSIGNED NOT NULL,
+  doc_type ENUM('RC','INS','FC','PUC','TAX','PERMIT','VP','OTHER') NOT NULL,
+  file_path VARCHAR(512) NOT NULL,
+  original_filename VARCHAR(512) NOT NULL,
+  expiry_date DATE NULL,
+  status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  rejection_note TEXT NULL,
+  uploaded_by_user_id BIGINT UNSIGNED NULL,
+  reviewed_by_user_id BIGINT UNSIGNED NULL,
+  reviewed_at DATETIME NULL,
+  uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_vd_vehicle (vehicle_id),
+  KEY ix_vd_status (status),
+  KEY ix_vd_type (doc_type),
+  CONSTRAINT fk_vd_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id) ON DELETE CASCADE,
+  CONSTRAINT fk_vd_uploader FOREIGN KEY (uploaded_by_user_id) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_vd_reviewer FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE admin_notifications (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  type VARCHAR(64) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  body TEXT NULL,
+  entity_type VARCHAR(64) NULL,
+  entity_id BIGINT UNSIGNED NULL,
+  is_read TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_an_unread (is_read, created_at),
+  KEY ix_an_entity (entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE vehicle_site_managers (

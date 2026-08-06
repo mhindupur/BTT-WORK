@@ -21,6 +21,9 @@ export default function SmLayout() {
           <NavLink to="/sm" end className={linkCls}>
             Home
           </NavLink>
+          <NavLink to="/sm/vehicles" className={linkCls}>
+            Vehicles
+          </NavLink>
           <NavLink to="/sm/issue-indent" className={linkCls}>
             Issue Indent
           </NavLink>

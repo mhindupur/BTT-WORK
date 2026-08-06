@@ -1,22 +1,86 @@
 import { Router } from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin, requireSiteManager } from "../middleware/auth.js";
 import { normalizeVehicleRegistration } from "../utils/vehicleReg.js";
+import { isValidDocType, VEHICLE_DOC_TYPES } from "../constants/vehicleDocs.js";
+import { notifyAdmin } from "../services/notifications.js";
+
+const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
+const vehicleDocDir = path.join(uploadRoot, "vehicles");
+fs.mkdirSync(vehicleDocDir, { recursive: true });
+
+const uploadDoc = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, vehicleDocDir),
+    filename: (_req, file, cb) => {
+      const safe = String(file.originalname || "doc").replace(/[^\w.\-]+/g, "_").slice(0, 80);
+      cb(null, `${Date.now()}_${safe}`);
+    },
+  }),
+  limits: { fileSize: 12 * 1024 * 1024 },
+});
 
 const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name,
   (SELECT GROUP_CONCAT(u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM vehicle_site_managers vsm
     JOIN site_managers sm ON sm.id = vsm.site_manager_id
     JOIN users u ON u.id = sm.user_id WHERE vsm.vehicle_id = v.id) AS site_manager_names,
-  (SELECT MIN(vsm2.site_manager_id) FROM vehicle_site_managers vsm2 WHERE vsm2.vehicle_id = v.id) AS site_manager_id
+  (SELECT MIN(vsm2.site_manager_id) FROM vehicle_site_managers vsm2 WHERE vsm2.vehicle_id = v.id) AS site_manager_id,
+  (SELECT u2.full_name FROM site_managers sm2 JOIN users u2 ON u2.id = sm2.user_id
+    WHERE sm2.id = v.submitted_by_site_manager_id) AS submitted_by_name,
+  (SELECT COUNT(*) FROM vehicle_documents vd WHERE vd.vehicle_id = v.id) AS doc_count,
+  (SELECT COUNT(*) FROM vehicle_documents vd WHERE vd.vehicle_id = v.id AND vd.status = 'pending') AS pending_doc_count
  FROM vehicles v JOIN clients c ON c.id = v.client_id`;
 
-const admin = Router();
-admin.use(requireAuth, requireAdmin);
+function pickVehicleFields(body, existing = {}) {
+  const out = {
+    owner_name: existing.owner_name ?? null,
+    owner_phone: existing.owner_phone ?? null,
+    make_model: existing.make_model ?? null,
+    fuel_type: existing.fuel_type ?? null,
+    insurance_expiry: existing.insurance_expiry ?? null,
+    fitness_expiry: existing.fitness_expiry ?? null,
+    puc_expiry: existing.puc_expiry ?? null,
+    tax_expiry: existing.tax_expiry ?? null,
+    permit_expiry: existing.permit_expiry ?? null,
+    notes: existing.notes ?? null,
+    is_active: existing.is_active != null ? Number(existing.is_active) : 1,
+  };
+  for (const k of [
+    "owner_name",
+    "owner_phone",
+    "make_model",
+    "fuel_type",
+    "insurance_expiry",
+    "fitness_expiry",
+    "puc_expiry",
+    "tax_expiry",
+    "permit_expiry",
+    "notes",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) {
+      const v = body[k];
+      out[k] = v === "" || v == null ? null : String(v);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "is_active")) {
+    out.is_active = body.is_active ? 1 : 0;
+  }
+  return out;
+}
 
-admin.get("/", async (_req, res) => {
-  const rows = await query(`${VEHICLE_ADMIN_ROW} ORDER BY v.id DESC`);
-  res.json(rows);
-});
+async function listDocs(vehicleId) {
+  return query(
+    `SELECT vd.*, u.full_name AS uploaded_by_name
+     FROM vehicle_documents vd
+     LEFT JOIN users u ON u.id = vd.uploaded_by_user_id
+     WHERE vd.vehicle_id = ?
+     ORDER BY vd.doc_type, vd.id DESC`,
+    [vehicleId]
+  );
+}
 
 async function assertSmBelongsToClient(siteManagerIds, clientId) {
   for (const smid of siteManagerIds) {
@@ -29,12 +93,50 @@ async function assertSmBelongsToClient(siteManagerIds, clientId) {
   return null;
 }
 
-admin.post("/", async (req, res) => {
-  const { client_id, registration_number, owner_name, owner_phone, notes, site_manager_id, site_manager_ids } =
-    req.body || {};
-  if (!client_id) {
-    return res.status(400).json({ error: "client_id required" });
+async function smCanAccessVehicle(smId, vehicleId) {
+  const v = await queryOne("SELECT * FROM vehicles WHERE id = ?", [vehicleId]);
+  if (!v) return { error: "Not found", status: 404 };
+  if (Number(v.submitted_by_site_manager_id) === Number(smId)) return { vehicle: v };
+  const link = await queryOne(
+    "SELECT 1 FROM vehicle_site_managers WHERE vehicle_id = ? AND site_manager_id = ?",
+    [vehicleId, smId]
+  );
+  if (!link) return { error: "Vehicle not assigned to you", status: 403 };
+  return { vehicle: v };
+}
+
+const admin = Router();
+admin.use(requireAuth, requireAdmin);
+
+admin.get("/", async (req, res) => {
+  const status = String(req.query.approval_status || "").trim();
+  let sql = `${VEHICLE_ADMIN_ROW}`;
+  const params = [];
+  if (status) {
+    sql += ` WHERE v.approval_status = ?`;
+    params.push(status);
   }
+  sql += ` ORDER BY v.id DESC`;
+  res.json(await query(sql, params));
+});
+
+admin.get("/pending-review", async (_req, res) => {
+  res.json(
+    await query(
+      `${VEHICLE_ADMIN_ROW} WHERE v.approval_status = 'pending_review' ORDER BY v.submitted_at DESC, v.id DESC`
+    )
+  );
+});
+
+admin.get("/:id/documents", async (req, res) => {
+  const v = await queryOne("SELECT id FROM vehicles WHERE id = ?", [req.params.id]);
+  if (!v) return res.status(404).json({ error: "Not found" });
+  res.json(await listDocs(req.params.id));
+});
+
+admin.post("/", async (req, res) => {
+  const { client_id, registration_number, site_manager_id, site_manager_ids } = req.body || {};
+  if (!client_id) return res.status(400).json({ error: "client_id required" });
   const cid = Number(client_id);
   if (registration_number == null || String(registration_number).trim() === "") {
     return res.status(400).json({ error: "Vehicle registration is required" });
@@ -53,28 +155,30 @@ admin.post("/", async (req, res) => {
   if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
 
   let smIds = [];
-  if (site_manager_id != null && site_manager_id !== "") {
-    smIds = [Number(site_manager_id)];
-  } else if (Array.isArray(site_manager_ids)) {
-    smIds = site_manager_ids.map(Number).filter(Boolean);
-  }
+  if (site_manager_id != null && site_manager_id !== "") smIds = [Number(site_manager_id)];
+  else if (Array.isArray(site_manager_ids)) smIds = site_manager_ids.map(Number).filter(Boolean);
 
   const smErr = await assertSmBelongsToClient(smIds, cid);
   if (smErr) return res.status(smErr.status).json({ error: smErr.error });
 
+  const f = pickVehicleFields(req.body || {});
   const result = await execute(
-    "INSERT INTO vehicles (client_id, registration_number, owner_name, owner_phone, notes) VALUES (?,?,?,?,?)",
-    [cid, reg, owner_name || null, owner_phone || null, notes || null]
+    `INSERT INTO vehicles (
+      client_id, registration_number, owner_name, owner_phone, make_model, fuel_type,
+      insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry,
+      is_active, approval_status, notes
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    [
+      cid, reg, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
+      f.is_active, f.notes,
+    ]
   );
   const vid = result.insertId;
   for (const smid of smIds) {
-    await execute(
-      "INSERT IGNORE INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)",
-      [vid, smid]
-    );
+    await execute("INSERT IGNORE INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)", [vid, smid]);
   }
-  const row = await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [vid]);
-  res.status(201).json(row);
+  res.status(201).json(await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [vid]));
 });
 
 admin.patch("/:id", async (req, res) => {
@@ -89,19 +193,9 @@ admin.patch("/:id", async (req, res) => {
   if (body.client_id !== undefined && body.client_id !== null && body.client_id !== "") {
     client_id = Number(body.client_id);
   }
-
-  if (
-    body.registration_number !== undefined &&
-    body.registration_number !== null &&
-    String(body.registration_number).trim() !== ""
-  ) {
+  if (body.registration_number !== undefined && body.registration_number !== null && String(body.registration_number).trim() !== "") {
     const reg = normalizeVehicleRegistration(body.registration_number);
-    if (!reg) {
-      return res.status(400).json({
-        error:
-          "Invalid vehicle number. Examples: KA-01-MM-0001, KA-01-0001, or KA01MM0001",
-      });
-    }
+    if (!reg) return res.status(400).json({ error: "Invalid vehicle number" });
     registration_number = reg;
   }
 
@@ -111,42 +205,103 @@ admin.patch("/:id", async (req, res) => {
   );
   if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
 
-  let owner_name = existing.owner_name;
-  let owner_phone = existing.owner_phone;
-  let notes = existing.notes;
-  if ("owner_name" in body) owner_name = body.owner_name ? String(body.owner_name) : null;
-  if ("owner_phone" in body) owner_phone = body.owner_phone ? String(body.owner_phone) : null;
-  if ("notes" in body) notes = body.notes ? String(body.notes) : null;
-
+  const f = pickVehicleFields(body, existing);
   await execute(
-    "UPDATE vehicles SET client_id = ?, registration_number = ?, owner_name = ?, owner_phone = ?, notes = ? WHERE id = ?",
-    [client_id, registration_number, owner_name, owner_phone, notes, id]
+    `UPDATE vehicles SET client_id=?, registration_number=?, owner_name=?, owner_phone=?,
+      make_model=?, fuel_type=?, insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?,
+      permit_expiry=?, is_active=?, notes=? WHERE id=?`,
+    [
+      client_id, registration_number, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
+      f.is_active, f.notes, id,
+    ]
   );
 
   const assignSm =
-    Object.prototype.hasOwnProperty.call(body, "site_manager_id") ||
-    Array.isArray(body.site_manager_ids);
+    Object.prototype.hasOwnProperty.call(body, "site_manager_id") || Array.isArray(body.site_manager_ids);
 
   if (assignSm) {
+    if (existing.approval_status !== "approved") {
+      return res.status(400).json({ error: "Assign site manager only after the vehicle is approved" });
+    }
     await execute("DELETE FROM vehicle_site_managers WHERE vehicle_id = ?", [id]);
     let smIds = [];
-    if (body.site_manager_id != null && body.site_manager_id !== "") {
-      smIds = [Number(body.site_manager_id)];
-    } else if (Array.isArray(body.site_manager_ids)) {
-      smIds = body.site_manager_ids.map(Number).filter(Boolean);
-    }
+    if (body.site_manager_id != null && body.site_manager_id !== "") smIds = [Number(body.site_manager_id)];
+    else if (Array.isArray(body.site_manager_ids)) smIds = body.site_manager_ids.map(Number).filter(Boolean);
     const smErr = await assertSmBelongsToClient(smIds, client_id);
     if (smErr) return res.status(smErr.status).json({ error: smErr.error });
     for (const smid of smIds) {
-      await execute(
-        "INSERT INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)",
-        [id, smid]
-      );
+      await execute("INSERT INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)", [id, smid]);
     }
   }
 
-  const row = await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [id]);
-  res.json(row);
+  res.json(await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [id]));
+});
+
+admin.post("/:id/approve", async (req, res) => {
+  const id = req.params.id;
+  const existing = await queryOne("SELECT * FROM vehicles WHERE id = ?", [id]);
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (!["pending_review", "rejected"].includes(existing.approval_status)) {
+    return res.status(400).json({ error: "Vehicle is not awaiting approval" });
+  }
+  await execute(
+    `UPDATE vehicles SET approval_status='approved', reviewed_by_user_id=?, reviewed_at=NOW(),
+      rejection_note=NULL, is_active=1 WHERE id=?`,
+    [req.user.id, id]
+  );
+  if (existing.submitted_by_site_manager_id) {
+    await execute("INSERT IGNORE INTO vehicle_site_managers (vehicle_id, site_manager_id) VALUES (?,?)", [
+      id,
+      existing.submitted_by_site_manager_id,
+    ]);
+  }
+  await execute(
+    `UPDATE vehicle_documents SET status='approved', reviewed_by_user_id=?, reviewed_at=NOW()
+     WHERE vehicle_id=? AND status='pending'`,
+    [req.user.id, id]
+  );
+  res.json(await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [id]));
+});
+
+admin.post("/:id/reject", async (req, res) => {
+  const note = String(req.body?.rejection_note || req.body?.note || "").trim();
+  if (!note) return res.status(400).json({ error: "rejection_note required" });
+  const existing = await queryOne("SELECT * FROM vehicles WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (existing.approval_status !== "pending_review") {
+    return res.status(400).json({ error: "Only pending_review vehicles can be rejected" });
+  }
+  await execute(
+    `UPDATE vehicles SET approval_status='rejected', reviewed_by_user_id=?, reviewed_at=NOW(),
+      rejection_note=? WHERE id=?`,
+    [req.user.id, note, req.params.id]
+  );
+  res.json(await queryOne(`${VEHICLE_ADMIN_ROW} WHERE v.id = ?`, [req.params.id]));
+});
+
+admin.post("/documents/:docId/approve", async (req, res) => {
+  const doc = await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [req.params.docId]);
+  if (!doc) return res.status(404).json({ error: "Not found" });
+  await execute(
+    `UPDATE vehicle_documents SET status='approved', rejection_note=NULL,
+      reviewed_by_user_id=?, reviewed_at=NOW() WHERE id=?`,
+    [req.user.id, doc.id]
+  );
+  res.json(await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [doc.id]));
+});
+
+admin.post("/documents/:docId/reject", async (req, res) => {
+  const note = String(req.body?.rejection_note || req.body?.note || "").trim();
+  if (!note) return res.status(400).json({ error: "rejection_note required" });
+  const doc = await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [req.params.docId]);
+  if (!doc) return res.status(404).json({ error: "Not found" });
+  await execute(
+    `UPDATE vehicle_documents SET status='rejected', rejection_note=?,
+      reviewed_by_user_id=?, reviewed_at=NOW() WHERE id=?`,
+    [note, req.user.id, doc.id]
+  );
+  res.json(await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [doc.id]));
 });
 
 admin.delete("/:id", async (req, res) => {
@@ -154,25 +309,201 @@ admin.delete("/:id", async (req, res) => {
   res.status(204).end();
 });
 
-/** Site manager: vehicles assigned to them */
 const sm = Router();
 sm.use(requireAuth, requireSiteManager);
 
 sm.get("/mine", async (req, res) => {
-  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  const smRow = await queryOne("SELECT id, client_id FROM site_managers WHERE user_id = ?", [req.user.id]);
   if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
-  const rows = await query(
-    `SELECT v.*, c.name AS client_name FROM vehicles v
-     JOIN vehicle_site_managers vsm ON vsm.vehicle_id = v.id
-     JOIN clients c ON c.id = v.client_id
-     WHERE vsm.site_manager_id = ?
-     ORDER BY v.registration_number`,
-    [smRow.id]
+  const forWork = String(req.query.for_work || "") === "1";
+  if (forWork) {
+    return res.json(
+      await query(
+        `SELECT v.*, c.name AS client_name FROM vehicles v
+         JOIN vehicle_site_managers vsm ON vsm.vehicle_id = v.id
+         JOIN clients c ON c.id = v.client_id
+         WHERE vsm.site_manager_id = ? AND v.approval_status = 'approved' AND v.is_active = 1
+         ORDER BY v.registration_number`,
+        [smRow.id]
+      )
+    );
+  }
+  res.json(
+    await query(
+      `SELECT v.*, c.name AS client_name,
+         (SELECT COUNT(*) FROM vehicle_documents vd WHERE vd.vehicle_id = v.id) AS doc_count
+       FROM vehicles v
+       JOIN clients c ON c.id = v.client_id
+       WHERE v.submitted_by_site_manager_id = ?
+          OR v.id IN (SELECT vehicle_id FROM vehicle_site_managers WHERE site_manager_id = ?)
+       ORDER BY v.id DESC`,
+      [smRow.id, smRow.id]
+    )
   );
-  res.json(rows);
 });
 
-/** Last 30 days indents for vehicle (all site managers) — safeguard panel */
+sm.get("/doc-types", (_req, res) => res.json(VEHICLE_DOC_TYPES));
+
+sm.post("/", async (req, res) => {
+  const smRow = await queryOne("SELECT id, client_id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const { registration_number } = req.body || {};
+  if (!registration_number || String(registration_number).trim() === "") {
+    return res.status(400).json({ error: "Vehicle registration is required" });
+  }
+  const reg = normalizeVehicleRegistration(registration_number);
+  if (!reg) return res.status(400).json({ error: "Invalid vehicle number" });
+  const dup = await queryOne(
+    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ?",
+    [smRow.client_id, reg]
+  );
+  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+
+  const f = pickVehicleFields(req.body || {});
+  const result = await execute(
+    `INSERT INTO vehicles (
+      client_id, registration_number, owner_name, owner_phone, make_model, fuel_type,
+      insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry,
+      is_active, approval_status, submitted_by_site_manager_id, notes
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    [
+      smRow.client_id, reg, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
+      smRow.id, f.notes,
+    ]
+  );
+  res.status(201).json(
+    await queryOne(
+      `SELECT v.*, c.name AS client_name FROM vehicles v JOIN clients c ON c.id = v.client_id WHERE v.id = ?`,
+      [result.insertId]
+    )
+  );
+});
+
+sm.patch("/:id", async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const access = await smCanAccessVehicle(smRow.id, req.params.id);
+  if (access.error) return res.status(access.status).json({ error: access.error });
+  const existing = access.vehicle;
+  if (!["draft", "rejected"].includes(existing.approval_status)) {
+    return res.status(400).json({ error: "Only draft or rejected vehicles can be edited by site manager" });
+  }
+  if (Number(existing.submitted_by_site_manager_id) !== Number(smRow.id)) {
+    return res.status(403).json({ error: "You can only edit vehicles you submitted" });
+  }
+
+  const body = req.body || {};
+  let registration_number = existing.registration_number;
+  if (body.registration_number != null && String(body.registration_number).trim() !== "") {
+    const reg = normalizeVehicleRegistration(body.registration_number);
+    if (!reg) return res.status(400).json({ error: "Invalid vehicle number" });
+    registration_number = reg;
+  }
+  const dup = await queryOne(
+    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ? AND id <> ?",
+    [existing.client_id, registration_number, existing.id]
+  );
+  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+
+  const f = pickVehicleFields(body, existing);
+  await execute(
+    `UPDATE vehicles SET registration_number=?, owner_name=?, owner_phone=?, make_model=?, fuel_type=?,
+      insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?, notes=?,
+      approval_status='draft', rejection_note=NULL WHERE id=?`,
+    [
+      registration_number, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry, f.notes,
+      existing.id,
+    ]
+  );
+  res.json(
+    await queryOne(
+      `SELECT v.*, c.name AS client_name FROM vehicles v JOIN clients c ON c.id = v.client_id WHERE v.id = ?`,
+      [existing.id]
+    )
+  );
+});
+
+sm.get("/:id/documents", async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const access = await smCanAccessVehicle(smRow.id, req.params.id);
+  if (access.error) return res.status(access.status).json({ error: access.error });
+  res.json(await listDocs(req.params.id));
+});
+
+sm.post("/:id/documents", uploadDoc.single("file"), async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const access = await smCanAccessVehicle(smRow.id, req.params.id);
+  if (access.error) return res.status(access.status).json({ error: access.error });
+  const existing = access.vehicle;
+  if (!["draft", "rejected", "pending_review"].includes(existing.approval_status)) {
+    return res.status(400).json({ error: "Cannot upload documents for an approved vehicle here" });
+  }
+  if (Number(existing.submitted_by_site_manager_id) !== Number(smRow.id)) {
+    return res.status(403).json({ error: "You can only upload docs for vehicles you submitted" });
+  }
+  if (!req.file) return res.status(400).json({ error: "file required" });
+  const docType = String(req.body?.doc_type || "").toUpperCase();
+  if (!isValidDocType(docType)) {
+    return res.status(400).json({ error: `doc_type must be one of: ${VEHICLE_DOC_TYPES.join(", ")}` });
+  }
+  const expiry = req.body?.expiry_date ? String(req.body.expiry_date) : null;
+  const filePath = `/uploads/vehicles/${req.file.filename}`;
+  const result = await execute(
+    `INSERT INTO vehicle_documents
+      (vehicle_id, doc_type, file_path, original_filename, expiry_date, status, uploaded_by_user_id)
+     VALUES (?,?,?,?,?,'pending',?)`,
+    [existing.id, docType, filePath, req.file.originalname || req.file.filename, expiry, req.user.id]
+  );
+  if (existing.approval_status === "rejected") {
+    await execute("UPDATE vehicles SET approval_status='draft', rejection_note=NULL WHERE id=?", [existing.id]);
+  }
+  res.status(201).json(await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [result.insertId]));
+});
+
+sm.post("/:id/submit", async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const access = await smCanAccessVehicle(smRow.id, req.params.id);
+  if (access.error) return res.status(access.status).json({ error: access.error });
+  const existing = access.vehicle;
+  if (Number(existing.submitted_by_site_manager_id) !== Number(smRow.id)) {
+    return res.status(403).json({ error: "You can only submit vehicles you created" });
+  }
+  if (!["draft", "rejected"].includes(existing.approval_status)) {
+    return res.status(400).json({ error: "Vehicle is already submitted or approved" });
+  }
+  const docs = await queryOne("SELECT COUNT(*) AS c FROM vehicle_documents WHERE vehicle_id = ?", [existing.id]);
+  if (!Number(docs?.c || 0)) {
+    return res.status(400).json({ error: "Upload at least one supporting document before submit" });
+  }
+
+  await execute(
+    `UPDATE vehicles SET approval_status='pending_review', submitted_at=NOW(),
+      submitted_by_site_manager_id=?, rejection_note=NULL WHERE id=?`,
+    [smRow.id, existing.id]
+  );
+
+  const smUser = await queryOne("SELECT full_name FROM users WHERE id = ?", [req.user.id]);
+  await notifyAdmin({
+    type: "vehicle_submitted",
+    title: `Vehicle pending approval: ${existing.registration_number}`,
+    body: `${smUser?.full_name || "Site manager"} submitted vehicle ${existing.registration_number} with documents for review.`,
+    entityType: "vehicle",
+    entityId: existing.id,
+  });
+
+  res.json(
+    await queryOne(
+      `SELECT v.*, c.name AS client_name FROM vehicles v JOIN clients c ON c.id = v.client_id WHERE v.id = ?`,
+      [existing.id]
+    )
+  );
+});
+
 sm.get("/:vehicleId/indent-history", async (req, res) => {
   const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
   if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
@@ -181,6 +512,10 @@ sm.get("/:vehicleId/indent-history", async (req, res) => {
     [req.params.vehicleId, smRow.id]
   );
   if (!access) return res.status(403).json({ error: "Vehicle not assigned to you" });
+  const veh = await queryOne("SELECT approval_status FROM vehicles WHERE id = ?", [req.params.vehicleId]);
+  if (!veh || veh.approval_status !== "approved") {
+    return res.status(403).json({ error: "Vehicle is not approved for work yet" });
+  }
   const rows = await query(
     `SELECT i.id, i.serial_number, i.amount_rs, i.status, i.created_at,
             u.full_name AS issued_by_name

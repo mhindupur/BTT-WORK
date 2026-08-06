@@ -16,7 +16,10 @@ export default function IssueIndent() {
   const cameraInputRef = useRef(null);
 
   useEffect(() => {
-    api.get("/sm/vehicles/mine").then((r) => setVehicles(r.data)).catch(console.error);
+    api
+      .get("/sm/vehicles/mine", { params: { for_work: 1 } })
+      .then((r) => setVehicles(r.data))
+      .catch(console.error);
   }, []);
 
   useEffect(() => {

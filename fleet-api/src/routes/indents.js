@@ -73,10 +73,19 @@ sm.post("/", upload.single("photo"), async (req, res) => {
   const serialNorm = String(serial_number).trim().toUpperCase();
 
   const access = await queryOne(
-    "SELECT 1 FROM vehicle_site_managers WHERE vehicle_id = ? AND site_manager_id = ?",
+    `SELECT v.approval_status, v.is_active
+     FROM vehicle_site_managers vsm
+     JOIN vehicles v ON v.id = vsm.vehicle_id
+     WHERE vsm.vehicle_id = ? AND vsm.site_manager_id = ?`,
     [vehicle_id, smRow.id]
   );
   if (!access) return res.status(403).json({ error: "Vehicle not assigned to you" });
+  if (access.approval_status !== "approved" || !Number(access.is_active)) {
+    return res.status(403).json({
+      error:
+        "Vehicle is not approved by BTT admin yet. You cannot assign/issue work until documents and vehicle details are approved.",
+    });
+  }
 
   const imagePath = req.file ? `/uploads/indents/${req.file.filename}` : null;
   const conn = await pool.getConnection();

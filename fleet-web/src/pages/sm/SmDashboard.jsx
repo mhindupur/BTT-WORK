@@ -14,6 +14,12 @@ export default function SmDashboard() {
       </p>
       <div className="mt-6 flex flex-col gap-3">
         <Link
+          to="/sm/vehicles"
+          className="block bg-btt-navy text-white text-center py-3.5 sm:py-3 rounded-xl font-medium min-h-[48px] flex items-center justify-center hover:opacity-95 active:opacity-90"
+        >
+          Vehicles &amp; documents
+        </Link>
+        <Link
           to="/sm/issue-indent"
           className="block bg-btt-accent text-white text-center py-3.5 sm:py-3 rounded-xl font-medium min-h-[48px] flex items-center justify-center hover:opacity-95 active:opacity-90"
         >

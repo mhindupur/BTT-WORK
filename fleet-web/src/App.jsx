@@ -12,9 +12,11 @@ import AdminIndents from "./pages/admin/Indents";
 import AdminIndentSeries from "./pages/admin/IndentSeries";
 import AdminFuel from "./pages/admin/Fuel";
 import AdminPayments from "./pages/admin/Payments";
+import AdminVehicleApprovals from "./pages/admin/VehicleApprovals";
 import SmDashboard from "./pages/sm/SmDashboard";
 import IssueIndent from "./pages/sm/IssueIndent";
 import MyIndents from "./pages/sm/MyIndents";
+import SmVehicles from "./pages/sm/Vehicles";
 
 function Guard({ role, children }) {
   const { user, ready } = useAuth();
@@ -41,6 +43,7 @@ export default function App() {
         <Route path="clients" element={<AdminClients />} />
         <Route path="site-managers" element={<AdminSiteManagers />} />
         <Route path="vehicles" element={<AdminVehicles />} />
+        <Route path="vehicle-approvals" element={<AdminVehicleApprovals />} />
         <Route path="indents" element={<AdminIndents />} />
         <Route path="indent-series" element={<AdminIndentSeries />} />
         <Route path="fuel" element={<AdminFuel />} />
@@ -55,6 +58,7 @@ export default function App() {
         }
       >
         <Route index element={<SmDashboard />} />
+        <Route path="vehicles" element={<SmVehicles />} />
         <Route path="issue-indent" element={<IssueIndent />} />
         <Route path="my-indents" element={<MyIndents />} />
       </Route>
