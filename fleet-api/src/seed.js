@@ -80,6 +80,18 @@ async function main() {
   }
   console.log("[seed] Vehicle", reg, "assigned to supervisor for indent demo.");
 
+  // Default vehicle types (Sedan, SUV, TT, Bus, …)
+  try {
+    const { ensureDefaultVehicleTypes } = await import("./routes/vehicleTypes.js");
+    await ensureDefaultVehicleTypes();
+    console.log("[seed] Vehicle types ready (Sedan, SUV, TT, Bus, …).");
+  } catch (err) {
+    console.warn(
+      "[seed] Skipped vehicle types (apply fleet-db/migration_005_vehicle_types.sql if table missing):",
+      err.message
+    );
+  }
+
   const adminUser = await queryOne("SELECT id FROM users WHERE email = ?", [adminEmail]);
   const demoBatch = await queryOne(
     "SELECT id FROM indent_serial_batches WHERE site_manager_id = ? AND description LIKE 'Demo seed%'",

@@ -13,6 +13,7 @@ import AdminIndentSeries from "./pages/admin/IndentSeries";
 import AdminFuel from "./pages/admin/Fuel";
 import AdminPayments from "./pages/admin/Payments";
 import AdminVehicleApprovals from "./pages/admin/VehicleApprovals";
+import AdminVehicleTypes from "./pages/admin/VehicleTypes";
 import SmDashboard from "./pages/sm/SmDashboard";
 import IssueIndent from "./pages/sm/IssueIndent";
 import MyIndents from "./pages/sm/MyIndents";
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="clients" element={<AdminClients />} />
         <Route path="site-managers" element={<AdminSiteManagers />} />
         <Route path="vehicles" element={<AdminVehicles />} />
+        <Route path="vehicle-types" element={<AdminVehicleTypes />} />
         <Route path="vehicle-approvals" element={<AdminVehicleApprovals />} />
         <Route path="indents" element={<AdminIndents />} />
         <Route path="indent-series" element={<AdminIndentSeries />} />

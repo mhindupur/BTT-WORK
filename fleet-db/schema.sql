@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS admin_notifications;
 DROP TABLE IF EXISTS vehicle_documents;
 DROP TABLE IF EXISTS vehicle_site_managers;
 DROP TABLE IF EXISTS vehicles;
+DROP TABLE IF EXISTS vehicle_types;
 DROP TABLE IF EXISTS site_managers;
 DROP TABLE IF EXISTS clients;
 DROP TABLE IF EXISTS users;
@@ -61,6 +62,31 @@ CREATE TABLE site_managers (
   CONSTRAINT fk_sm_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE vehicle_types (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) NOT NULL,
+  code VARCHAR(32) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 100,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_vehicle_types_name (name),
+  KEY ix_vehicle_types_active (is_active, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO vehicle_types (name, code, sort_order) VALUES
+  ('Sedan', 'SEDAN', 10),
+  ('SUV', 'SUV', 20),
+  ('Hatchback', 'HATCH', 30),
+  ('MUV / MPV', 'MUV', 40),
+  ('Tempo Traveller (TT)', 'TT', 50),
+  ('Mini Bus', 'MINIBUS', 60),
+  ('Bus', 'BUS', 70),
+  ('Van', 'VAN', 80),
+  ('Truck / LCV', 'TRUCK', 90),
+  ('Electric Cab', 'EV', 100),
+  ('Other', 'OTHER', 900);
+
 CREATE TABLE vehicles (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   client_id BIGINT UNSIGNED NOT NULL,
@@ -68,6 +94,7 @@ CREATE TABLE vehicles (
   owner_name VARCHAR(255) NULL,
   owner_phone VARCHAR(64) NULL,
   make_model VARCHAR(255) NULL,
+  vehicle_type_id BIGINT UNSIGNED NULL,
   fuel_type VARCHAR(32) NULL,
   insurance_expiry DATE NULL,
   fitness_expiry DATE NULL,
@@ -88,7 +115,9 @@ CREATE TABLE vehicles (
   UNIQUE KEY uq_client_vehicle (client_id, registration_number),
   KEY ix_vehicles_reg (registration_number),
   KEY ix_vehicles_approval (approval_status),
+  KEY ix_vehicles_type (vehicle_type_id),
   CONSTRAINT fk_veh_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE,
+  CONSTRAINT fk_veh_type FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types (id) ON DELETE SET NULL,
   CONSTRAINT fk_veh_submitted_sm FOREIGN KEY (submitted_by_site_manager_id) REFERENCES site_managers (id) ON DELETE SET NULL,
   CONSTRAINT fk_veh_reviewed_user FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

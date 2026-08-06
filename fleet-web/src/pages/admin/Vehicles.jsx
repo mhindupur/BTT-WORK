@@ -22,6 +22,8 @@ export default function AdminVehicles() {
     site_manager_id: "",
     owner_name: "",
     owner_phone: "",
+    vehicle_type_id: "",
+    fuel_type: "",
     notes: "",
     pasteHint: "",
     ...emptyRegParts(),
@@ -29,16 +31,19 @@ export default function AdminVehicles() {
   const [formErr, setFormErr] = useState("");
   const [editing, setEditing] = useState(null);
   const [editErr, setEditErr] = useState("");
+  const [vehicleTypes, setVehicleTypes] = useState([]);
 
   async function load() {
-    const [v, c, sm] = await Promise.all([
+    const [v, c, sm, vt] = await Promise.all([
       api.get("/admin/vehicles"),
       api.get("/clients"),
       api.get("/site-managers"),
+      api.get("/vehicle-types"),
     ]);
     setRows(v.data);
     setClients(c.data);
     setManagers(sm.data);
+    setVehicleTypes(vt.data);
   }
 
   useEffect(() => {
@@ -99,6 +104,8 @@ export default function AdminVehicles() {
         registration_number: reg,
         owner_name: form.owner_name || null,
         owner_phone: form.owner_phone || null,
+        vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
+        fuel_type: form.fuel_type || null,
         notes: form.notes || null,
         site_manager_id: form.site_manager_id === "" ? null : Number(form.site_manager_id),
       });
@@ -107,6 +114,8 @@ export default function AdminVehicles() {
         site_manager_id: "",
         owner_name: "",
         owner_phone: "",
+        vehicle_type_id: "",
+        fuel_type: "",
         notes: "",
         pasteHint: "",
         ...emptyRegParts(),
@@ -126,6 +135,8 @@ export default function AdminVehicles() {
       site_manager_id: row.site_manager_id != null ? String(row.site_manager_id) : "",
       owner_name: row.owner_name || "",
       owner_phone: row.owner_phone || "",
+      vehicle_type_id: row.vehicle_type_id != null ? String(row.vehicle_type_id) : "",
+      fuel_type: row.fuel_type || "",
       notes: row.notes || "",
       pasteHint: p.unparsed ? row.registration_number : "",
       state: p.unparsed ? "KA" : p.state,
@@ -151,6 +162,8 @@ export default function AdminVehicles() {
         registration_number: reg,
         owner_name: editing.owner_name || null,
         owner_phone: editing.owner_phone || null,
+        vehicle_type_id: editing.vehicle_type_id === "" ? null : Number(editing.vehicle_type_id),
+        fuel_type: editing.fuel_type || null,
         notes: editing.notes || null,
         site_manager_id: editing.site_manager_id === "" ? null : Number(editing.site_manager_id),
       });
@@ -292,6 +305,29 @@ export default function AdminVehicles() {
             value={form.owner_phone}
             onChange={(e) => setForm({ ...form, owner_phone: e.target.value })}
           />
+          <select
+            className="border rounded-lg px-3 py-2 bg-white"
+            value={form.vehicle_type_id}
+            onChange={(e) => setForm({ ...form, vehicle_type_id: e.target.value })}
+          >
+            <option value="">Vehicle type</option>
+            {vehicleTypes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="border rounded-lg px-3 py-2 bg-white"
+            value={form.fuel_type}
+            onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}
+          >
+            <option value="">Fuel type</option>
+            <option value="DIE">Diesel</option>
+            <option value="PET">Petrol</option>
+            <option value="CNG">CNG</option>
+            <option value="ELE">Electric</option>
+          </select>
         </div>
         <input
           className="border rounded-lg px-3 py-2 w-full"
@@ -315,6 +351,7 @@ export default function AdminVehicles() {
           <thead className="bg-slate-50">
             <tr>
               <th className="text-left p-3">Reg</th>
+              <th className="text-left p-3">Type</th>
               <th className="text-left p-3">Status</th>
               <th className="text-left p-3">Client</th>
               <th className="text-left p-3">Owner</th>
@@ -345,6 +382,7 @@ export default function AdminVehicles() {
                       </span>
                     ) : null}
                   </td>
+                  <td className="p-3">{v.vehicle_type_name || v.make_model || "—"}</td>
                   <td className="p-3">
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
@@ -514,6 +552,29 @@ export default function AdminVehicles() {
                 value={editing.owner_phone}
                 onChange={(e) => setEditing({ ...editing, owner_phone: e.target.value })}
               />
+              <select
+                className="w-full border rounded-lg px-3 py-2 bg-white"
+                value={editing.vehicle_type_id}
+                onChange={(e) => setEditing({ ...editing, vehicle_type_id: e.target.value })}
+              >
+                <option value="">Vehicle type</option>
+                {vehicleTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="w-full border rounded-lg px-3 py-2 bg-white"
+                value={editing.fuel_type}
+                onChange={(e) => setEditing({ ...editing, fuel_type: e.target.value })}
+              >
+                <option value="">Fuel type</option>
+                <option value="DIE">Diesel</option>
+                <option value="PET">Petrol</option>
+                <option value="CNG">CNG</option>
+                <option value="ELE">Electric</option>
+              </select>
               <input
                 className="w-full border rounded-lg px-3 py-2"
                 placeholder="Notes"

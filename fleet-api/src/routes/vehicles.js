@@ -23,7 +23,7 @@ const uploadDoc = multer({
   limits: { fileSize: 12 * 1024 * 1024 },
 });
 
-const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name,
+const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name, vt.name AS vehicle_type_name,
   (SELECT GROUP_CONCAT(u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM vehicle_site_managers vsm
     JOIN site_managers sm ON sm.id = vsm.site_manager_id
     JOIN users u ON u.id = sm.user_id WHERE vsm.vehicle_id = v.id) AS site_manager_names,
@@ -32,7 +32,31 @@ const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name,
     WHERE sm2.id = v.submitted_by_site_manager_id) AS submitted_by_name,
   (SELECT COUNT(*) FROM vehicle_documents vd WHERE vd.vehicle_id = v.id) AS doc_count,
   (SELECT COUNT(*) FROM vehicle_documents vd WHERE vd.vehicle_id = v.id AND vd.status = 'pending') AS pending_doc_count
- FROM vehicles v JOIN clients c ON c.id = v.client_id`;
+ FROM vehicles v JOIN clients c ON c.id = v.client_id
+ LEFT JOIN vehicle_types vt ON vt.id = v.vehicle_type_id`;
+
+async function resolveVehicleType(body, existing = {}) {
+  let typeId =
+    body.vehicle_type_id != null && body.vehicle_type_id !== ""
+      ? Number(body.vehicle_type_id)
+      : existing.vehicle_type_id != null
+        ? Number(existing.vehicle_type_id)
+        : null;
+  if (Object.prototype.hasOwnProperty.call(body, "vehicle_type_id") && (body.vehicle_type_id === "" || body.vehicle_type_id == null)) {
+    typeId = null;
+  }
+  let makeModel = existing.make_model ?? null;
+  if (Object.prototype.hasOwnProperty.call(body, "make_model")) {
+    makeModel = body.make_model === "" || body.make_model == null ? null : String(body.make_model);
+  }
+  if (typeId) {
+    const t = await queryOne("SELECT id, name FROM vehicle_types WHERE id = ? AND is_active = 1", [typeId]);
+    if (!t) return { error: "Invalid vehicle type", status: 400 };
+    typeId = t.id;
+    makeModel = t.name;
+  }
+  return { vehicle_type_id: typeId, make_model: makeModel };
+}
 
 function pickVehicleFields(body, existing = {}) {
   const out = {
@@ -162,14 +186,16 @@ admin.post("/", async (req, res) => {
   if (smErr) return res.status(smErr.status).json({ error: smErr.error });
 
   const f = pickVehicleFields(req.body || {});
+  const typeRes = await resolveVehicleType(req.body || {}, {});
+  if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   const result = await execute(
     `INSERT INTO vehicles (
-      client_id, registration_number, owner_name, owner_phone, make_model, fuel_type,
+      client_id, registration_number, owner_name, owner_phone, make_model, vehicle_type_id, fuel_type,
       insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry,
       is_active, approval_status, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
     [
-      cid, reg, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      cid, reg, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
       f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
       f.is_active, f.notes,
     ]
@@ -206,12 +232,14 @@ admin.patch("/:id", async (req, res) => {
   if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
 
   const f = pickVehicleFields(body, existing);
+  const typeRes = await resolveVehicleType(body, existing);
+  if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   await execute(
     `UPDATE vehicles SET client_id=?, registration_number=?, owner_name=?, owner_phone=?,
-      make_model=?, fuel_type=?, insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?,
+      make_model=?, vehicle_type_id=?, fuel_type=?, insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?,
       permit_expiry=?, is_active=?, notes=? WHERE id=?`,
     [
-      client_id, registration_number, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      client_id, registration_number, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
       f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
       f.is_active, f.notes, id,
     ]
@@ -360,14 +388,16 @@ sm.post("/", async (req, res) => {
   if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
 
   const f = pickVehicleFields(req.body || {});
+  const typeRes = await resolveVehicleType(req.body || {}, {});
+  if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   const result = await execute(
     `INSERT INTO vehicles (
-      client_id, registration_number, owner_name, owner_phone, make_model, fuel_type,
+      client_id, registration_number, owner_name, owner_phone, make_model, vehicle_type_id, fuel_type,
       insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry,
       is_active, approval_status, submitted_by_site_manager_id, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
     [
-      smRow.client_id, reg, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      smRow.client_id, reg, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
       f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
       smRow.id, f.notes,
     ]
@@ -407,12 +437,14 @@ sm.patch("/:id", async (req, res) => {
   if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
 
   const f = pickVehicleFields(body, existing);
+  const typeRes = await resolveVehicleType(body, existing);
+  if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   await execute(
-    `UPDATE vehicles SET registration_number=?, owner_name=?, owner_phone=?, make_model=?, fuel_type=?,
+    `UPDATE vehicles SET registration_number=?, owner_name=?, owner_phone=?, make_model=?, vehicle_type_id=?, fuel_type=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?, notes=?,
       approval_status='draft', rejection_note=NULL WHERE id=?`,
     [
-      registration_number, f.owner_name, f.owner_phone, f.make_model, f.fuel_type,
+      registration_number, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
       f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry, f.notes,
       existing.id,
     ]

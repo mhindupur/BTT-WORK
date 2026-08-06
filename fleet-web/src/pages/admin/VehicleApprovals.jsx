@@ -196,7 +196,7 @@ export default function AdminVehicleApprovals() {
             </div>
             <div>
               <span className="text-slate-500">Model</span>
-              <div className="font-semibold">{selected.make_model || "—"}</div>
+              <div className="font-semibold">{selected.vehicle_type_name || selected.make_model || "—"}</div>
             </div>
             <div>
               <span className="text-slate-500">Fuel</span>

@@ -52,8 +52,10 @@ r.get("/summary", async (_req, res) => {
      FROM vehicles GROUP BY label ORDER BY value DESC`
   );
   const byModel = await query(
-    `SELECT COALESCE(NULLIF(TRIM(make_model), ''), 'Unknown') AS label, COUNT(*) AS value
-     FROM vehicles GROUP BY label ORDER BY value DESC LIMIT 12`
+    `SELECT COALESCE(vt.name, NULLIF(TRIM(v.make_model), ''), 'Unknown') AS label, COUNT(*) AS value
+     FROM vehicles v
+     LEFT JOIN vehicle_types vt ON vt.id = v.vehicle_type_id
+     GROUP BY label ORDER BY value DESC LIMIT 12`
   );
   const byApproval = await query(
     `SELECT approval_status AS label, COUNT(*) AS value

@@ -17,7 +17,7 @@ const emptyForm = {
   registration_number: "",
   owner_name: "",
   owner_phone: "",
-  make_model: "",
+  vehicle_type_id: "",
   fuel_type: "",
   notes: "",
 };
@@ -46,6 +46,7 @@ export default function SmVehicles() {
   const [uploadingType, setUploadingType] = useState(null);
   const [docStep, setDocStep] = useState(0);
   const [showOptional, setShowOptional] = useState(false);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -76,6 +77,10 @@ export default function SmVehicles() {
 
   useEffect(() => {
     load().catch(console.error);
+    api
+      .get("/vehicle-types")
+      .then((r) => setVehicleTypes(r.data))
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -129,7 +134,10 @@ export default function SmVehicles() {
     setErr("");
     setMsg("");
     try {
-      const { data } = await api.post("/sm/vehicles", form);
+      const { data } = await api.post("/sm/vehicles", {
+        ...form,
+        vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
+      });
       setMsg(`Vehicle ${data.registration_number} saved. Upload documents one by one.`);
       setForm(emptyForm);
       setSelectedId(data.id);
@@ -241,13 +249,19 @@ export default function SmVehicles() {
                 onChange={(e) => setForm({ ...form, owner_phone: e.target.value })}
               />
             </Field>
-            <Field label="Model">
-              <input
-                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base"
-                placeholder="SUV / Sedan"
-                value={form.make_model}
-                onChange={(e) => setForm({ ...form, make_model: e.target.value })}
-              />
+            <Field label="Vehicle type">
+              <select
+                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base bg-white"
+                value={form.vehicle_type_id}
+                onChange={(e) => setForm({ ...form, vehicle_type_id: e.target.value })}
+              >
+                <option value="">Select type</option>
+                {vehicleTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Fuel type">
               <select

@@ -23,6 +23,9 @@ export default function AdminLayout() {
           <NavLink to="/admin/vehicles" className={linkCls}>
             Vehicles
           </NavLink>
+          <NavLink to="/admin/vehicle-types" className={linkCls}>
+            Vehicle types
+          </NavLink>
           <NavLink to="/admin/vehicle-approvals" className={linkCls}>
             Vehicle approvals
           </NavLink>

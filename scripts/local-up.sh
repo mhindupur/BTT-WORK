@@ -43,7 +43,7 @@ if [[ "${TABLES:-0}" == "0" ]]; then
 else
   echo "    Existing DB ($TABLES tables) — applying additive migrations only"
 fi
-for m in fleet-db/migration_002_indent_serial_batches.sql fleet-db/migration_003_password_reset_otps.sql fleet-db/migration_004_vehicle_approval.sql; do
+for m in fleet-db/migration_002_indent_serial_batches.sql fleet-db/migration_003_password_reset_otps.sql fleet-db/migration_004_vehicle_approval.sql fleet-db/migration_005_vehicle_types.sql; do
   if [[ -f "$m" ]]; then
     docker exec -i btt-fleet-mysql mysql -uroot -pbtt-fleet-root-local btt_fleet < "$m" || true
   fi

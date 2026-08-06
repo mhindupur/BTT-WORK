@@ -14,6 +14,7 @@ import { paymentsAdmin, paymentsPublic } from "./routes/payments.js";
 import dashboard from "./routes/dashboard.js";
 import indentBatches from "./routes/indentBatches.js";
 import notifications from "./routes/notifications.js";
+import vehicleTypes from "./routes/vehicleTypes.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -47,6 +48,7 @@ app.use("/api/admin/payments", paymentsAdmin);
 app.use("/api/public/payments", paymentsPublic);
 app.use("/api/admin/dashboard", dashboard);
 app.use("/api/admin/notifications", notifications);
+app.use("/api/vehicle-types", vehicleTypes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

@@ -103,7 +103,7 @@ export default function AdminDashboard() {
         <h2 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide">Fleet analytics</h2>
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           <DonutChart title="Approval status" segments={approvalSegments} />
-          <DonutChart title="Vehicle models" segments={charts.by_model || []} />
+          <DonutChart title="Vehicle types" segments={charts.by_model || []} />
           <DonutChart title="Fuel types" segments={charts.by_fuel || []} />
           <DonutChart title="Vehicles by client / site" segments={charts.by_client || []} />
           <DonutChart
