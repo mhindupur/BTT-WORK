@@ -176,12 +176,10 @@ export default function DocUploadCard({
             dragging ? "border-btt-accent bg-amber-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
           } ${busy ? "opacity-60 pointer-events-none" : ""}`}
         >
-          <div className="text-3xl mb-2" aria-hidden>
-            ⬆
-          </div>
-          <div className="text-base font-bold text-btt-navy">Drop file here</div>
-          <div className="text-sm text-slate-600 mt-1">or tap to choose from phone / computer</div>
-          <div className="text-xs text-slate-500 mt-2">Photo or PDF · max 12 MB</div>
+          <div className="text-sm font-bold tracking-wide text-btt-accent mb-2 uppercase">Upload</div>
+          <div className="text-lg font-bold text-btt-navy">Tap here to take / choose photo</div>
+          <div className="text-sm text-slate-600 mt-1">Or drag and drop the file into this box</div>
+          <div className="text-xs text-slate-500 mt-2">JPG, PNG or PDF · max 12 MB</div>
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500 text-center">

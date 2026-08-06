@@ -307,10 +307,15 @@ export default function AdminVehicles() {
       </form>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b bg-slate-50 text-xs text-slate-600">
+          Rows in <span className="font-semibold text-amber-800">amber</span> are waiting for document / vehicle
+          review.
+        </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
               <th className="text-left p-3">Reg</th>
+              <th className="text-left p-3">Status</th>
               <th className="text-left p-3">Client</th>
               <th className="text-left p-3">Owner</th>
               <th className="text-left p-3">Site manager</th>
@@ -318,25 +323,72 @@ export default function AdminVehicles() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((v) => (
-              <tr key={v.id} className="border-t border-slate-100">
-                <td className="p-3 font-mono font-medium">{v.registration_number}</td>
-                <td className="p-3">{v.client_name}</td>
-                <td className="p-3">
-                  {v.owner_name} {v.owner_phone ? `· ${v.owner_phone}` : ""}
-                </td>
-                <td className="p-3 text-slate-600">{v.site_manager_names || "—"}</td>
-                <td className="p-3">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(v)}
-                    className="text-btt-navy font-medium hover:underline"
-                  >
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((v) => {
+              const pending = v.approval_status === "pending_review";
+              const rejected = v.approval_status === "rejected";
+              return (
+                <tr
+                  key={v.id}
+                  className={`border-t border-slate-100 ${
+                    pending
+                      ? "bg-amber-50 ring-1 ring-inset ring-amber-200"
+                      : rejected
+                        ? "bg-red-50/60"
+                        : ""
+                  }`}
+                >
+                  <td className="p-3 font-mono font-medium">
+                    {v.registration_number}
+                    {pending ? (
+                      <span className="ml-2 inline-block align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500 text-white">
+                        Review pending
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="p-3">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                        pending
+                          ? "bg-amber-200 text-amber-950"
+                          : v.approval_status === "approved"
+                            ? "bg-green-100 text-green-800"
+                            : rejected
+                              ? "bg-red-100 text-red-800"
+                              : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {v.approval_status === "pending_review"
+                        ? "Pending review"
+                        : v.approval_status || "—"}
+                    </span>
+                  </td>
+                  <td className="p-3">{v.client_name}</td>
+                  <td className="p-3">
+                    {v.owner_name} {v.owner_phone ? `· ${v.owner_phone}` : ""}
+                  </td>
+                  <td className="p-3 text-slate-600">{v.site_manager_names || "—"}</td>
+                  <td className="p-3">
+                    <div className="flex flex-col gap-1 items-start">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(v)}
+                        className="text-btt-navy font-medium hover:underline"
+                      >
+                        Edit
+                      </button>
+                      {pending ? (
+                        <a
+                          href="/admin/vehicle-approvals"
+                          className="text-amber-800 font-semibold hover:underline text-xs"
+                        >
+                          Open approvals
+                        </a>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
