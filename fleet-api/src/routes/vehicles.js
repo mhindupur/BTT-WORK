@@ -5,7 +5,7 @@ import fs from "fs";
 import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin, requireSiteManager } from "../middleware/auth.js";
 import { normalizeVehicleRegistration } from "../utils/vehicleReg.js";
-import { isValidDocType, VEHICLE_DOC_TYPES } from "../constants/vehicleDocs.js";
+import { isValidDocType, VEHICLE_DOC_TYPES, DOC_TYPE_VEHICLE_DATE } from "../constants/vehicleDocs.js";
 import { notifyAdmin } from "../services/notifications.js";
 
 const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
@@ -452,16 +452,62 @@ sm.post("/:id/documents", uploadDoc.single("file"), async (req, res) => {
   }
   const expiry = req.body?.expiry_date ? String(req.body.expiry_date) : null;
   const filePath = `/uploads/vehicles/${req.file.filename}`;
+
+  // Replace previous uploads of the same type so each section has one current file
+  const oldDocs = await query(
+    "SELECT id, file_path FROM vehicle_documents WHERE vehicle_id = ? AND doc_type = ?",
+    [existing.id, docType]
+  );
+  for (const od of oldDocs) {
+    await execute("DELETE FROM vehicle_documents WHERE id = ?", [od.id]);
+    if (od.file_path) {
+      const abs = path.join(uploadRoot, String(od.file_path).replace(/^\/uploads\/?/, ""));
+      fs.unlink(abs, () => {});
+    }
+  }
+
   const result = await execute(
     `INSERT INTO vehicle_documents
       (vehicle_id, doc_type, file_path, original_filename, expiry_date, status, uploaded_by_user_id)
      VALUES (?,?,?,?,?,'pending',?)`,
     [existing.id, docType, filePath, req.file.originalname || req.file.filename, expiry, req.user.id]
   );
+
+  const vehicleDateCol = DOC_TYPE_VEHICLE_DATE[docType];
+  if (vehicleDateCol && expiry) {
+    await execute(`UPDATE vehicles SET ${vehicleDateCol} = ? WHERE id = ?`, [expiry, existing.id]);
+  }
+
   if (existing.approval_status === "rejected") {
     await execute("UPDATE vehicles SET approval_status='draft', rejection_note=NULL WHERE id=?", [existing.id]);
   }
   res.status(201).json(await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [result.insertId]));
+});
+
+/** Remove a document from a draft/rejected/pending vehicle (site manager who submitted it). */
+sm.delete("/:id/documents/:docId", async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const access = await smCanAccessVehicle(smRow.id, req.params.id);
+  if (access.error) return res.status(access.status).json({ error: access.error });
+  const existing = access.vehicle;
+  if (!["draft", "rejected", "pending_review"].includes(existing.approval_status)) {
+    return res.status(400).json({ error: "Cannot remove documents for an approved vehicle here" });
+  }
+  if (Number(existing.submitted_by_site_manager_id) !== Number(smRow.id)) {
+    return res.status(403).json({ error: "You can only manage docs for vehicles you submitted" });
+  }
+  const doc = await queryOne("SELECT * FROM vehicle_documents WHERE id = ? AND vehicle_id = ?", [
+    req.params.docId,
+    existing.id,
+  ]);
+  if (!doc) return res.status(404).json({ error: "Document not found" });
+  await execute("DELETE FROM vehicle_documents WHERE id = ?", [doc.id]);
+  if (doc.file_path) {
+    const abs = path.join(uploadRoot, String(doc.file_path).replace(/^\/uploads\/?/, ""));
+    fs.unlink(abs, () => {});
+  }
+  res.status(204).end();
 });
 
 sm.post("/:id/submit", async (req, res) => {
