@@ -53,3 +53,7 @@ cd fleet-web && npm install && npm run dev
 ```
 
 More detail: [docs/PROPOSAL-APP-README.md](./docs/PROPOSAL-APP-README.md) · [docs/LOCAL-DEV-CHEATSHEET.md](./docs/LOCAL-DEV-CHEATSHEET.md)
+
+## Deploy on AWS EC2
+
+Step-by-step (MySQL + API + Frontend + Nginx): **[docs/AWS-EC2-DEPLOY.md](./docs/AWS-EC2-DEPLOY.md)**

@@ -86,6 +86,8 @@ npm run dev
 
 The Vite dev server proxies `/api` → `http://127.0.0.1:4000`; a production build needs the same `/api` reverse-proxy to `fleet-api`.
 
+**AWS EC2 production install (FE + BE + MySQL + Nginx):** see [AWS-EC2-DEPLOY.md](./AWS-EC2-DEPLOY.md).
+
 ---
 
 ## Proposal coverage (summary)
