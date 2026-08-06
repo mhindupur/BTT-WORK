@@ -1,9 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
 import { query, queryOne, execute, pool } from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { normalizeWhatsAppDigits, sendAuthOtpWhatsApp } from "../services/whatsapp.js";
 
 const r = Router();
 r.use(requireAuth, requireAdmin);
@@ -20,33 +18,21 @@ r.get("/", async (_req, res) => {
   res.json(rows);
 });
 
-async function issueOtpForUser(userId, phoneRaw, meta) {
-  const e164 = normalizeWhatsAppDigits(phoneRaw);
-  if (!e164) return { ok: false, error: "invalid_phone" };
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const otpHash = await bcrypt.hash(otp, 10);
-  const ttlMin = Number(process.env.AUTH_OTP_TTL_MINUTES || 10);
-  const exp = new Date(Date.now() + ttlMin * 60 * 1000);
-  await execute("UPDATE password_reset_otps SET consumed_at = NOW() WHERE user_id = ? AND consumed_at IS NULL", [
-    userId,
-  ]);
-  await execute(
-    "INSERT INTO password_reset_otps (user_id, phone_e164, otp_hash, expires_at) VALUES (?,?,?,?)",
-    [userId, e164, otpHash, exp]
-  );
-  const wa = await sendAuthOtpWhatsApp(phoneRaw, otp, meta);
-  return wa;
-}
-
-/** Create site manager: auto-generate a password (not shared) and send OTP for first-time set/reset. */
+/**
+ * Create site manager with an admin-set password (no OTP).
+ * WhatsApp OTP onboarding can be re-enabled for production later.
+ */
 r.post("/", async (req, res) => {
-  const { email, full_name, phone, client_id, location_label } = req.body || {};
+  const { email, full_name, phone, client_id, location_label, password } = req.body || {};
   if (!email || !full_name || !client_id) {
     return res.status(400).json({ error: "email, full_name, client_id required" });
   }
+  const plain = String(password || "").trim();
+  if (plain.length < 6) {
+    return res.status(400).json({ error: "password required (min 6 characters)" });
+  }
   const exists = await queryOne("SELECT id FROM users WHERE email = ?", [email.trim().toLowerCase()]);
   if (exists) return res.status(409).json({ error: "Email already in use" });
-  const plain = crypto.randomBytes(18).toString("base64url");
   const hash = await bcrypt.hash(plain, 10);
   const ures = await execute(
     "INSERT INTO users (email, password_hash, role, full_name, phone) VALUES (?,?,?,?,?)",
@@ -61,13 +47,7 @@ r.post("/", async (req, res) => {
      FROM site_managers sm JOIN users u ON u.id = sm.user_id WHERE sm.user_id = ?`,
     [ures.insertId]
   );
-  let whatsapp = null;
-  if (phone) whatsapp = await issueOtpForUser(ures.insertId, phone, { callbackData: `sm_create_otp:${row?.id || ""}` });
-  res.status(201).json({
-    ...row,
-    otp_sent: whatsapp?.ok ?? null,
-    otp_error: whatsapp?.ok ? null : whatsapp?.error || null,
-  });
+  res.status(201).json({ ...row, password_set: true });
 });
 
 r.patch("/:id", async (req, res) => {
@@ -93,16 +73,24 @@ r.patch("/:id", async (req, res) => {
   res.json(row);
 });
 
+/**
+ * Admin sets site manager password directly (temporary until OTP/WhatsApp is production-ready).
+ * Body: { new_password: string }
+ */
 r.post("/:id/reset-password", async (req, res) => {
   const sm = await queryOne("SELECT user_id FROM site_managers WHERE id = ?", [req.params.id]);
   if (!sm) return res.status(404).json({ error: "Not found" });
-  const u = await queryOne("SELECT phone FROM users WHERE id = ?", [sm.user_id]);
-  let whatsapp = null;
-  if (u?.phone) whatsapp = await issueOtpForUser(sm.user_id, u.phone, { callbackData: `sm_reset_otp:${req.params.id}` });
-  res.json({
-    otp_sent: whatsapp?.ok ?? null,
-    otp_error: whatsapp?.ok ? null : whatsapp?.error || null,
-  });
+  const newPassword = String(req.body?.new_password || "").trim();
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "new_password required (min 6 characters)" });
+  }
+  const hash = await bcrypt.hash(newPassword, 10);
+  await execute("UPDATE users SET password_hash = ? WHERE id = ?", [hash, sm.user_id]);
+  // Invalidate any pending OTPs so old codes cannot be used
+  await execute("UPDATE password_reset_otps SET consumed_at = NOW() WHERE user_id = ? AND consumed_at IS NULL", [
+    sm.user_id,
+  ]);
+  res.json({ ok: true, password_set: true });
 });
 
 /** Handover site manager responsibilities to another SM of the same client */

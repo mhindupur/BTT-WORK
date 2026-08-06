@@ -11,10 +11,12 @@ export default function AdminSiteManagers() {
     phone: "",
     client_id: "",
     location_label: "",
+    password: "",
   });
-  const [otpMeta, setOtpMeta] = useState(null);
+  const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [handover, setHandover] = useState(null); // { from, toId, alsoDelete }
+  const [pwdModal, setPwdModal] = useState(null); // { id, name, email, password }
 
   function digits10(s) {
     return String(s || "").replace(/\D/g, "").slice(0, 10);
@@ -33,24 +35,33 @@ export default function AdminSiteManagers() {
 
   async function create(e) {
     e.preventDefault();
-    setOtpMeta(null);
-    setErr("");
-    const { data } = await api.post("/site-managers", {
-      ...form,
-      phone: digits10(form.phone),
-      client_id: Number(form.client_id),
-    });
-    setOtpMeta({ otp_sent: data.otp_sent, otp_error: data.otp_error, phone: form.phone || "" });
-    setForm({ email: "", full_name: "", phone: "", client_id: "", location_label: "" });
-    load();
-  }
-
-  async function resetPassword(smId) {
-    setOtpMeta(null);
+    setMsg("");
     setErr("");
     try {
-      const { data } = await api.post(`/site-managers/${smId}/reset-password`);
-      setOtpMeta({ otp_sent: data.otp_sent, otp_error: data.otp_error });
+      await api.post("/site-managers", {
+        ...form,
+        phone: digits10(form.phone),
+        client_id: Number(form.client_id),
+        password: form.password,
+      });
+      setMsg(`Site manager created. Share the password with ${form.email} out of band.`);
+      setForm({ email: "", full_name: "", phone: "", client_id: "", location_label: "", password: "" });
+      load();
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  async function submitSetPassword() {
+    if (!pwdModal?.id) return;
+    setErr("");
+    setMsg("");
+    try {
+      await api.post(`/site-managers/${pwdModal.id}/reset-password`, {
+        new_password: pwdModal.password,
+      });
+      setMsg(`Password updated for ${pwdModal.email}. Share it with the site manager out of band.`);
+      setPwdModal(null);
       load();
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
@@ -95,18 +106,14 @@ export default function AdminSiteManagers() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-btt-navy mb-4">Site managers</h1>
+      <p className="text-sm text-slate-600 mb-4">
+        Admin sets the login password directly (temporary). WhatsApp OTP will be re-enabled for production.
+      </p>
       {err && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{err}</div>
       )}
-      {otpMeta && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
-          OTP request initiated.
-          <div className="mt-2 text-xs text-slate-700">
-            WhatsApp OTP:{" "}
-            <strong>{otpMeta.otp_sent === true ? "sent" : otpMeta.otp_sent === false ? "failed" : "—"}</strong>
-            {otpMeta.otp_error ? ` — ${otpMeta.otp_error}` : ""}
-          </div>
-        </div>
+      {msg && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-900">{msg}</div>
       )}
       <form
         onSubmit={create}
@@ -153,13 +160,22 @@ export default function AdminSiteManagers() {
           ))}
         </select>
         <input
-          className="border rounded-lg px-3 py-2 md:col-span-2"
+          className="border rounded-lg px-3 py-2"
+          placeholder="Initial password * (min 6)"
+          type="text"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          required
+          minLength={6}
+        />
+        <input
+          className="border rounded-lg px-3 py-2"
           placeholder="Location label"
           value={form.location_label}
           onChange={(e) => setForm({ ...form, location_label: e.target.value })}
         />
         <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 md:col-span-2">
-          Create (send OTP)
+          Create site manager
         </button>
       </form>
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -185,9 +201,11 @@ export default function AdminSiteManagers() {
                     <button
                       type="button"
                       className="text-btt-accent font-medium hover:underline"
-                      onClick={() => resetPassword(r.id)}
+                      onClick={() =>
+                        setPwdModal({ id: r.id, name: r.full_name, email: r.email, password: "" })
+                      }
                     >
-                      Send OTP
+                      Set password
                     </button>
                     <button
                       type="button"
@@ -210,6 +228,52 @@ export default function AdminSiteManagers() {
           </tbody>
         </table>
       </div>
+
+      {pwdModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-lg font-bold text-btt-navy">Set password</h2>
+              <button
+                type="button"
+                onClick={() => setPwdModal(null)}
+                className="text-slate-500 hover:text-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-slate-600">
+              Set a new login password for <strong>{pwdModal.name}</strong> ({pwdModal.email}). Share it with them
+              directly — no WhatsApp OTP.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">New password *</label>
+              <input
+                className="mt-1 w-full border rounded-lg px-3 py-2"
+                type="text"
+                value={pwdModal.password}
+                onChange={(e) => setPwdModal({ ...pwdModal, password: e.target.value })}
+                minLength={6}
+                placeholder="Min 6 characters"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="px-4 py-2 rounded-lg border" onClick={() => setPwdModal(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-btt-navy text-white font-medium disabled:opacity-50"
+                disabled={!pwdModal.password || pwdModal.password.length < 6}
+                onClick={submitSetPassword}
+              >
+                Save password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {handover && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
