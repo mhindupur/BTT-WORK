@@ -27,6 +27,16 @@ function dateStr(v) {
   return String(v).slice(0, 10);
 }
 
+/** Must live outside SmVehicles — defining it inside remounts inputs on every keystroke and steals focus. */
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-semibold text-slate-700">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
 export default function SmVehicles() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -155,15 +165,6 @@ export default function SmVehicles() {
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
     }
-  }
-
-  function Field({ label, children }) {
-    return (
-      <label className="block">
-        <span className="text-sm font-semibold text-slate-700">{label}</span>
-        <div className="mt-1">{children}</div>
-      </label>
-    );
   }
 
   return (
