@@ -95,22 +95,45 @@ Secure / set root password (interactive):
 sudo mysql_secure_installation
 ```
 
-Create database + app user:
+Create database + app user (on Ubuntu, root usually works with **socket auth** — use `sudo mysql`, not password):
 
 ```bash
-sudo mysql -u root -p
+sudo mysql
 ```
 
-In MySQL:
+In MySQL paste:
 
 ```sql
-CREATE DATABASE btt_fleet CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'btt'@'localhost' IDENTIFIED BY 'CHANGE_ME_STRONG_PASSWORD';
+CREATE DATABASE IF NOT EXISTS btt_fleet CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+DROP USER IF EXISTS 'btt'@'localhost';
+CREATE USER 'btt'@'localhost' IDENTIFIED WITH mysql_native_password BY 'BttFleet2026';
 GRANT ALL PRIVILEGES ON btt_fleet.* TO 'btt'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
 ```
 
+**Test login before schema load:**
+
+```bash
+mysql -u btt -pBttFleet2026 -e "SELECT USER(), CURRENT_USER();"
+```
+
+If that works:
+
+```bash
+mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/schema.sql
+```
+
+Then put the **same** password in `fleet-api/.env`:
+
+```env
+DATABASE_URL=mysql://btt:BttFleet2026@127.0.0.1:3306/btt_fleet
+```
+
+> Prefer a password **without** `@` so `DATABASE_URL` stays simple. Change `BttFleet2026` after first successful deploy.
+
+**`ERROR 1045 Access denied`** means the password you type ≠ the one MySQL has, or user was never created. Re-run the `DROP USER` / `CREATE USER` block above.
 ---
 
 ## 5. Clone the application
