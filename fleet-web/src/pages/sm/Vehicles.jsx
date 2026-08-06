@@ -223,6 +223,56 @@ export default function SmVehicles() {
           <h3 className="text-base font-bold text-btt-navy">
             Upload documents — {selected.registration_number}
           </h3>
+          {selected.approval_status === "rejected" && selected.rejection_note ? (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-900">
+              <div className="font-bold text-xs uppercase tracking-wide mb-1">Vehicle rejected by admin</div>
+              <div>{selected.rejection_note}</div>
+            </div>
+          ) : null}
+          {PRIMARY_DOC_SECTIONS.concat(OPTIONAL_DOC_SECTIONS)
+            .map((s) => docsByType[s.type])
+            .filter((d) => d && d.status === "rejected").length > 0 ? (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 space-y-2">
+              <div className="font-bold text-xs uppercase tracking-wide text-red-900">
+                Documents rejected — fix and re-upload
+              </div>
+              <ul className="space-y-2">
+                {PRIMARY_DOC_SECTIONS.concat(OPTIONAL_DOC_SECTIONS).map((s) => {
+                  const d = docsByType[s.type];
+                  if (!d || d.status !== "rejected") return null;
+                  return (
+                    <li key={s.type} className="text-sm text-red-900 bg-white/70 border border-red-100 rounded-lg p-2">
+                      <div className="font-semibold">{s.title}</div>
+                      <div className="mt-0.5">
+                        {d.rejection_note ? (
+                          <>
+                            <span className="text-xs font-bold uppercase text-red-800">Reason: </span>
+                            {d.rejection_note}
+                          </>
+                        ) : (
+                          <span className="text-slate-700">No reason given — please re-upload a clearer file.</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="mt-1 text-xs font-semibold text-btt-accent underline"
+                        onClick={() => {
+                          const idx = activeSections.findIndex((x) => x.type === s.type);
+                          if (idx >= 0) setDocStep(idx);
+                          else if (s.optional) {
+                            setIncludeOptional(true);
+                            setDocStep(PRIMARY_DOC_SECTIONS.length);
+                          }
+                        }}
+                      >
+                        Open this document
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
           <p className="text-sm text-slate-600">
             Document {docStep + 1} of {activeSections.length}. Finish one, then tap Next.
           </p>

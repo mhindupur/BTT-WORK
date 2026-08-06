@@ -15,6 +15,7 @@ import dashboard from "./routes/dashboard.js";
 import indentBatches from "./routes/indentBatches.js";
 import notifications from "./routes/notifications.js";
 import vehicleTypes from "./routes/vehicleTypes.js";
+import smDashboard from "./routes/smDashboard.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -49,6 +50,7 @@ app.use("/api/public/payments", paymentsPublic);
 app.use("/api/admin/dashboard", dashboard);
 app.use("/api/admin/notifications", notifications);
 app.use("/api/vehicle-types", vehicleTypes);
+app.use("/api/sm/dashboard", smDashboard);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

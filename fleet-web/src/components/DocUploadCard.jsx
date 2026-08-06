@@ -120,7 +120,16 @@ export default function DocUploadCard({
                 </div>
               ) : null}
               {doc.rejection_note ? (
-                <div className="text-xs text-red-700 mt-1">Admin note: {doc.rejection_note}</div>
+                <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-900">
+                  <div className="font-bold text-xs uppercase tracking-wide text-red-800 mb-0.5">
+                    Admin rejected — reason
+                  </div>
+                  <div className="leading-snug">{doc.rejection_note}</div>
+                </div>
+              ) : doc.status === "rejected" ? (
+                <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-900 font-medium">
+                  Admin rejected this document. Please re-upload a clear file.
+                </div>
               ) : null}
             </div>
             <a

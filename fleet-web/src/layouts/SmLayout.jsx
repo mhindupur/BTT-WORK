@@ -19,7 +19,7 @@ export default function SmLayout() {
         </div>
         <nav className="p-2 flex flex-row md:flex-col gap-1 overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
           <NavLink to="/sm" end className={linkCls}>
-            Home
+            Dashboard
           </NavLink>
           <NavLink to="/sm/vehicles" className={linkCls}>
             Vehicles
