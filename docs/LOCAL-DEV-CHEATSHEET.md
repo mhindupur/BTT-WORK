@@ -1,9 +1,15 @@
-# Local dev cheatsheet
+# Local dev cheatsheet (YOUR Mac / laptop)
+
+**Important:** The Cursor cloud agent runs in a remote VM. Opening `http://127.0.0.1:5174` on your Mac only works if you start the app **locally** (or use Cursor Ports forwarding). Prefer local:
+
+```bash
+./scripts/local-up.sh
+```
+
+See root [README.md](../README.md).
 
 **Active stack:** `fleet-api` (Express), `fleet-web` (Vite/React), `fleet-db` (MySQL).  
 Full setup: [PROPOSAL-APP-README.md](./PROPOSAL-APP-README.md).
-
-Legacy `backend/` (FastAPI), `frontend/` (old MIS), and `database/` have been **removed** from this repo.
 
 ---
 
@@ -11,40 +17,37 @@ Legacy `backend/` (FastAPI), `frontend/` (old MIS), and `database/` have been **
 
 | Tool | Purpose |
 |------|---------|
-| Docker (optional) | MySQL on host port **3307** via root `docker-compose.yml` |
+| Docker Desktop | MySQL on host port **3308** via `docker-compose.fleet.yml` |
 | Node.js 18+ | `fleet-api` and `fleet-web` |
 
 ---
 
-## MySQL
+## Quick start
 
 ```bash
-docker compose up -d
-# Load schema (first time / fresh DB):
-docker exec -i btt-mysql mysql -uroot -pbtt-root-local-only btt_fleet < fleet-db/schema.sql
-docker exec -i btt-mysql mysql -uroot -pbtt-root-local-only btt_fleet < fleet-db/migration_002_indent_serial_batches.sql
-```
-
-Configure `fleet-api/.env`: `DATABASE_URL=mysql://btt:btt@127.0.0.1:3307/btt_fleet` (adjust user/password as needed).
-
----
-
-## API & web
-
-```bash
-cd fleet-api && npm install && cp .env.example .env  # edit .env
-npm run seed
-npm run dev   # http://127.0.0.1:4000
-```
-
-```bash
-cd fleet-web && npm install && npm run dev   # http://localhost:5174
+./scripts/local-up.sh
+# Web http://127.0.0.1:5174/   API http://127.0.0.1:4000/
+./scripts/local-down.sh --all   # when finished
 ```
 
 ---
 
-## Stop MySQL
+## MySQL only
 
 ```bash
-docker compose down
+docker compose -f docker-compose.fleet.yml up -d
+docker exec -i btt-fleet-mysql mysql -uroot -pbtt-fleet-root-local btt_fleet < fleet-db/schema.sql
 ```
+
+`fleet-api/.env`: `DATABASE_URL=mysql://btt:btt@127.0.0.1:3308/btt_fleet`
+
+---
+
+## API & web (manual)
+
+```bash
+cd fleet-api && npm install && npm run seed && npm run dev   # :4000
+cd fleet-web && npm install && npm run dev                   # :5174
+```
+
+Demo: `admin@btt.fleet` / `Admin@123` · `supervisor@btt.fleet` / `Supervisor@123`
