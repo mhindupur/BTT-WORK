@@ -88,6 +88,8 @@ The Vite dev server proxies `/api` → `http://127.0.0.1:4000`; a production bui
 
 **AWS EC2 production install (FE + BE + MySQL + Nginx):** see [AWS-EC2-DEPLOY.md](./AWS-EC2-DEPLOY.md).
 
+**AWS EC2 operations runbook** (install + issues faced + fixes): see [AWS-EC2-RUNBOOK.md](./AWS-EC2-RUNBOOK.md).
+
 ---
 
 ## Proposal coverage (summary)

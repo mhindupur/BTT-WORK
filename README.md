@@ -57,3 +57,5 @@ More detail: [docs/PROPOSAL-APP-README.md](./docs/PROPOSAL-APP-README.md) · [do
 ## Deploy on AWS EC2
 
 Step-by-step (MySQL + API + Frontend + Nginx): **[docs/AWS-EC2-DEPLOY.md](./docs/AWS-EC2-DEPLOY.md)**
+
+**Operations runbook** (install + real issues + fixes): **[docs/AWS-EC2-RUNBOOK.md](./docs/AWS-EC2-RUNBOOK.md)**
