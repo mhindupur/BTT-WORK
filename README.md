@@ -41,14 +41,15 @@ Stop:
 
 Logs: `.local-run/api.log`, `.local-run/web.log`
 
-## Cloud VM keep-alive
+## Cloud VM keep-alive (PM2)
 
 ```bash
 chmod +x scripts/cloud-up.sh
 ./scripts/cloud-up.sh
 ```
 
-This starts API + Web in **tmux** sessions with an auto-restart loop, plus a watchdog that repairs them if health checks fail.
+Starts API + Web under **PM2** with auto-restart when a process crashes.
+Do **not** rely on one-shot `node`/`vite` background jobs — those die when the agent session ends.
 
 ## Manual (two terminals)
 
