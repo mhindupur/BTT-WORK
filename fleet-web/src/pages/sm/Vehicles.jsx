@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
 import DocUploadCard from "../../components/DocUploadCard";
+import VehicleInfoFields from "../../components/VehicleInfoFields";
+import {
+  detailsPayload,
+  emptyVehicleDetails,
+} from "../../constants/vehicleFields";
 import {
   APPROVAL_STATUS_LABEL,
   OPTIONAL_DOC_SECTIONS,
@@ -15,14 +20,11 @@ const STATUS_BADGE = {
   rejected: "bg-red-100 text-red-900",
 };
 
-const emptyForm = {
+const emptyForm = () => ({
   registration_number: "",
-  owner_name: "",
-  owner_phone: "",
   vehicle_type_id: "",
-  fuel_type: "",
-  notes: "",
-};
+  ...emptyVehicleDetails(),
+});
 
 function dateStr(v) {
   if (!v) return "";
@@ -41,7 +43,7 @@ function Field({ label, children }) {
 
 export default function SmVehicles() {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => emptyForm());
   const [selectedId, setSelectedId] = useState(null);
   const [docs, setDocs] = useState([]);
   const [expiryByType, setExpiryByType] = useState({});
@@ -119,6 +121,9 @@ export default function SmVehicles() {
       const hay = [
         r.registration_number,
         r.owner_name,
+        r.ownership,
+        r.engine_number,
+        r.chassis_number,
         r.make_model,
         r.vehicle_type_name,
         r.approval_status,
@@ -148,11 +153,12 @@ export default function SmVehicles() {
     setMsg("");
     try {
       const { data } = await api.post("/sm/vehicles", {
-        ...form,
+        registration_number: form.registration_number,
         vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
+        ...detailsPayload(form),
       });
       setMsg(`Vehicle ${data.registration_number} saved. Upload documents below.`);
-      setForm(emptyForm);
+      setForm(emptyForm());
       setSelectedId(data.id);
       setDocStep(0);
       await load();
@@ -387,7 +393,7 @@ export default function SmVehicles() {
       {!selectedId && (
         <form onSubmit={create} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
           <h2 className="text-lg font-bold text-btt-navy">Step 1 — Vehicle details</h2>
-          <Field label="Vehicle number *">
+          <Field label="Vehicle number (Reg No) *">
             <input
               className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base uppercase"
               placeholder="e.g. KA01AB1234"
@@ -396,50 +402,13 @@ export default function SmVehicles() {
               required
             />
           </Field>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Owner name">
-              <input
-                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base"
-                value={form.owner_name}
-                onChange={(e) => setForm({ ...form, owner_name: e.target.value })}
-              />
-            </Field>
-            <Field label="Owner phone">
-              <input
-                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base"
-                inputMode="numeric"
-                value={form.owner_phone}
-                onChange={(e) => setForm({ ...form, owner_phone: e.target.value })}
-              />
-            </Field>
-            <Field label="Vehicle type">
-              <select
-                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base bg-white"
-                value={form.vehicle_type_id}
-                onChange={(e) => setForm({ ...form, vehicle_type_id: e.target.value })}
-              >
-                <option value="">Select type</option>
-                {vehicleTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Fuel type">
-              <select
-                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base bg-white"
-                value={form.fuel_type}
-                onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}
-              >
-                <option value="">Select</option>
-                <option value="DIE">Diesel</option>
-                <option value="PET">Petrol</option>
-                <option value="CNG">CNG</option>
-                <option value="ELE">Electric</option>
-              </select>
-            </Field>
-          </div>
+          <VehicleInfoFields
+            value={form}
+            onChange={setForm}
+            vehicleTypes={vehicleTypes}
+            showStatus={false}
+            dense
+          />
           <button type="submit" className="w-full bg-btt-navy text-white rounded-xl py-3.5 text-base font-bold">
             Save & upload documents
           </button>
@@ -456,7 +425,7 @@ export default function SmVehicles() {
                 className="text-xs font-semibold text-btt-accent"
                 onClick={() => {
                   setSelectedId(null);
-                  setForm(emptyForm);
+                  setForm(emptyForm());
                 }}
               >
                 + Add another

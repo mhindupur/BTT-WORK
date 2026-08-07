@@ -146,6 +146,7 @@ If upgrading an older DB only, apply additive migrations as needed:
 # mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_003_password_reset_otps.sql
 # mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_004_vehicle_approval.sql
 # mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_005_vehicle_types.sql
+# mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_006_vehicle_fleetbook_fields.sql
 ```
 
 Verify tables:

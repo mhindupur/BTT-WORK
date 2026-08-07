@@ -162,9 +162,10 @@ mysql -u btt -p btt_fleet < fleet-db/schema.sql
 # mysql -u btt -p btt_fleet < fleet-db/migration_003_password_reset_otps.sql
 # mysql -u btt -p btt_fleet < fleet-db/migration_004_vehicle_approval.sql
 # mysql -u btt -p btt_fleet < fleet-db/migration_005_vehicle_types.sql
+# mysql -u btt -p btt_fleet < fleet-db/migration_006_vehicle_fleetbook_fields.sql
 ```
 
-`schema.sql` already includes the latest tables (vehicles approval, OTP, vehicle types, etc.).
+`schema.sql` already includes the latest tables (vehicles approval, OTP, vehicle types, Fleetbook detail fields, etc.).
 
 ---
 

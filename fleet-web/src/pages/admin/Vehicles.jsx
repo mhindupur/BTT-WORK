@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import VehicleInfoFields from "../../components/VehicleInfoFields";
+import {
+  detailsFromVehicleRow,
+  detailsPayload,
+  emptyVehicleDetails,
+} from "../../constants/vehicleFields";
 import {
   buildRegistrationFromParts,
   normalizeVehicleRegistration,
@@ -13,21 +19,21 @@ const emptyRegParts = () => ({
   number: "",
 });
 
+const emptyForm = () => ({
+  client_id: "",
+  site_manager_id: "",
+  vehicle_type_id: "",
+  is_active: true,
+  pasteHint: "",
+  ...emptyRegParts(),
+  ...emptyVehicleDetails(),
+});
+
 export default function AdminVehicles() {
   const [rows, setRows] = useState([]);
   const [clients, setClients] = useState([]);
   const [managers, setManagers] = useState([]);
-  const [form, setForm] = useState({
-    client_id: "",
-    site_manager_id: "",
-    owner_name: "",
-    owner_phone: "",
-    vehicle_type_id: "",
-    fuel_type: "",
-    notes: "",
-    pasteHint: "",
-    ...emptyRegParts(),
-  });
+  const [form, setForm] = useState(emptyForm);
   const [formErr, setFormErr] = useState("");
   const [editing, setEditing] = useState(null);
   const [editErr, setEditErr] = useState("");
@@ -70,6 +76,9 @@ export default function AdminVehicles() {
         r.client_name,
         r.owner_name,
         r.owner_phone,
+        r.ownership,
+        r.engine_number,
+        r.chassis_number,
         r.site_manager_names,
         r.vehicle_type_name,
         r.make_model,
@@ -124,24 +133,12 @@ export default function AdminVehicles() {
       await api.post("/admin/vehicles", {
         client_id: Number(form.client_id),
         registration_number: reg,
-        owner_name: form.owner_name || null,
-        owner_phone: form.owner_phone || null,
         vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
-        fuel_type: form.fuel_type || null,
-        notes: form.notes || null,
         site_manager_id: form.site_manager_id === "" ? null : Number(form.site_manager_id),
+        is_active: form.is_active !== false,
+        ...detailsPayload(form),
       });
-      setForm({
-        client_id: "",
-        site_manager_id: "",
-        owner_name: "",
-        owner_phone: "",
-        vehicle_type_id: "",
-        fuel_type: "",
-        notes: "",
-        pasteHint: "",
-        ...emptyRegParts(),
-      });
+      setForm(emptyForm());
       load();
     } catch (ex) {
       setFormErr(ex.response?.data?.error || ex.message);
@@ -155,16 +152,14 @@ export default function AdminVehicles() {
       id: row.id,
       client_id: String(row.client_id),
       site_manager_id: row.site_manager_id != null ? String(row.site_manager_id) : "",
-      owner_name: row.owner_name || "",
-      owner_phone: row.owner_phone || "",
       vehicle_type_id: row.vehicle_type_id != null ? String(row.vehicle_type_id) : "",
-      fuel_type: row.fuel_type || "",
-      notes: row.notes || "",
+      is_active: row.is_active !== 0 && row.is_active !== false,
       pasteHint: p.unparsed ? row.registration_number : "",
       state: p.unparsed ? "KA" : p.state,
       district: p.unparsed ? "" : p.district,
       series: p.unparsed ? "" : p.series || "",
       number: p.unparsed ? "" : p.number,
+      ...detailsFromVehicleRow(row),
     });
   }
 
@@ -182,12 +177,10 @@ export default function AdminVehicles() {
       await api.patch(`/admin/vehicles/${editing.id}`, {
         client_id: Number(editing.client_id),
         registration_number: reg,
-        owner_name: editing.owner_name || null,
-        owner_phone: editing.owner_phone || null,
         vehicle_type_id: editing.vehicle_type_id === "" ? null : Number(editing.vehicle_type_id),
-        fuel_type: editing.fuel_type || null,
-        notes: editing.notes || null,
         site_manager_id: editing.site_manager_id === "" ? null : Number(editing.site_manager_id),
+        is_active: editing.is_active !== false,
+        ...detailsPayload(editing),
       });
       setEditing(null);
       load();
@@ -226,7 +219,7 @@ export default function AdminVehicles() {
             }
             required
           >
-            <option value="">Client *</option>
+            <option value="">Client / site *</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -250,7 +243,7 @@ export default function AdminVehicles() {
         </div>
 
         <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/80 space-y-3">
-          <div className="text-sm font-medium text-slate-700">Vehicle number *</div>
+          <div className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">State (2 letters)</label>
@@ -314,49 +307,7 @@ export default function AdminVehicles() {
           )}
         </div>
 
-        <div className="grid md:grid-cols-2 gap-3">
-          <input
-            className="border rounded-lg px-3 py-2"
-            placeholder="Owner name"
-            value={form.owner_name}
-            onChange={(e) => setForm({ ...form, owner_name: e.target.value })}
-          />
-          <input
-            className="border rounded-lg px-3 py-2"
-            placeholder="Owner mobile"
-            value={form.owner_phone}
-            onChange={(e) => setForm({ ...form, owner_phone: e.target.value })}
-          />
-          <select
-            className="border rounded-lg px-3 py-2 bg-white"
-            value={form.vehicle_type_id}
-            onChange={(e) => setForm({ ...form, vehicle_type_id: e.target.value })}
-          >
-            <option value="">Vehicle type</option>
-            {vehicleTypes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="border rounded-lg px-3 py-2 bg-white"
-            value={form.fuel_type}
-            onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}
-          >
-            <option value="">Fuel type</option>
-            <option value="DIE">Diesel</option>
-            <option value="PET">Petrol</option>
-            <option value="CNG">CNG</option>
-            <option value="ELE">Electric</option>
-          </select>
-        </div>
-        <input
-          className="border rounded-lg px-3 py-2 w-full"
-          placeholder="Notes (optional)"
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
+        <VehicleInfoFields value={form} onChange={setForm} vehicleTypes={vehicleTypes} />
 
         {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
         <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
@@ -372,7 +323,7 @@ export default function AdminVehicles() {
           </div>
           <input
             className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Search registration, client, owner, type, status…"
+            placeholder="Search registration, owner, chassis, engine, type…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -381,7 +332,8 @@ export default function AdminVehicles() {
           <thead className="bg-slate-50">
             <tr>
               <th className="text-left p-3">Reg</th>
-              <th className="text-left p-3">Type</th>
+              <th className="text-left p-3">Type / year</th>
+              <th className="text-left p-3">Ownership</th>
               <th className="text-left p-3">Status</th>
               <th className="text-left p-3">Client</th>
               <th className="text-left p-3">Owner</th>
@@ -412,7 +364,11 @@ export default function AdminVehicles() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="p-3">{v.vehicle_type_name || v.make_model || "—"}</td>
+                  <td className="p-3">
+                    {v.vehicle_type_name || v.make_model || "—"}
+                    {v.manufacture_year ? ` · ${v.manufacture_year}` : ""}
+                  </td>
+                  <td className="p-3">{v.ownership || "—"}</td>
                   <td className="p-3">
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
@@ -459,7 +415,7 @@ export default function AdminVehicles() {
             })}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={7} className="p-4 text-slate-500">
+                <td colSpan={8} className="p-4 text-slate-500">
                   {rows.length ? "No vehicles match your search." : "No vehicles yet."}
                 </td>
               </tr>
@@ -470,7 +426,7 @@ export default function AdminVehicles() {
 
       {editing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
             <div className="flex justify-between items-start gap-2">
               <h2 className="text-lg font-bold text-btt-navy">Edit vehicle</h2>
               <button
@@ -577,47 +533,7 @@ export default function AdminVehicles() {
                 )}
               </div>
 
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="Owner name"
-                value={editing.owner_name}
-                onChange={(e) => setEditing({ ...editing, owner_name: e.target.value })}
-              />
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="Owner mobile"
-                value={editing.owner_phone}
-                onChange={(e) => setEditing({ ...editing, owner_phone: e.target.value })}
-              />
-              <select
-                className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={editing.vehicle_type_id}
-                onChange={(e) => setEditing({ ...editing, vehicle_type_id: e.target.value })}
-              >
-                <option value="">Vehicle type</option>
-                {vehicleTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={editing.fuel_type}
-                onChange={(e) => setEditing({ ...editing, fuel_type: e.target.value })}
-              >
-                <option value="">Fuel type</option>
-                <option value="DIE">Diesel</option>
-                <option value="PET">Petrol</option>
-                <option value="CNG">CNG</option>
-                <option value="ELE">Electric</option>
-              </select>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="Notes"
-                value={editing.notes}
-                onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
-              />
+              <VehicleInfoFields value={editing} onChange={setEditing} vehicleTypes={vehicleTypes} dense />
 
               {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
               <div className="flex gap-2 justify-end">

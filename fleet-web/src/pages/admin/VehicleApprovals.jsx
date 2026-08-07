@@ -212,6 +212,10 @@ export default function AdminVehicleApprovals() {
 
           <div className="grid sm:grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 border border-slate-200 p-4">
             <div>
+              <span className="text-slate-500">Ownership</span>
+              <div className="font-semibold">{selected.ownership || "—"}</div>
+            </div>
+            <div>
               <span className="text-slate-500">Owner</span>
               <div className="font-semibold">{selected.owner_name || "—"}</div>
             </div>
@@ -220,12 +224,45 @@ export default function AdminVehicleApprovals() {
               <div className="font-semibold">{selected.owner_phone || "—"}</div>
             </div>
             <div>
-              <span className="text-slate-500">Model</span>
-              <div className="font-semibold">{selected.vehicle_type_name || selected.make_model || "—"}</div>
+              <span className="text-slate-500">Model / year</span>
+              <div className="font-semibold">
+                {selected.vehicle_type_name || selected.make_model || "—"}
+                {selected.manufacture_year ? ` · ${selected.manufacture_year}` : ""}
+              </div>
             </div>
             <div>
               <span className="text-slate-500">Fuel</span>
               <div className="font-semibold">{selected.fuel_type || "—"}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">AC</span>
+              <div className="font-semibold">{selected.ac_type || "—"}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">Engine no</span>
+              <div className="font-semibold font-mono text-xs">{selected.engine_number || "—"}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">Chassis no</span>
+              <div className="font-semibold font-mono text-xs">{selected.chassis_number || "—"}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">Attach date</span>
+              <div className="font-semibold">{dateStr(selected.attach_date)}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">Sub vendor</span>
+              <div className="font-semibold">{selected.sub_vendor || "—"}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">GPS</span>
+              <div className="font-semibold">
+                {selected.gps_installed ? `Yes${selected.gps_vendor ? ` · ${selected.gps_vendor}` : ""}` : "No"}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-500">GPS IMEI</span>
+              <div className="font-semibold font-mono text-xs">{selected.gps_imei || "—"}</div>
             </div>
             <div>
               <span className="text-slate-500">Insurance expiry</span>
@@ -234,6 +271,22 @@ export default function AdminVehicleApprovals() {
             <div>
               <span className="text-slate-500">Fitness expiry</span>
               <div className="font-semibold">{dateStr(selected.fitness_expiry)}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">PUC expiry</span>
+              <div className="font-semibold">{dateStr(selected.puc_expiry)}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">Tax expiry</span>
+              <div className="font-semibold">{dateStr(selected.tax_expiry)}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">42/47 expiry</span>
+              <div className="font-semibold">{dateStr(selected.form_42_47_expiry)}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">49 expiry</span>
+              <div className="font-semibold">{dateStr(selected.form_49_expiry)}</div>
             </div>
           </div>
 

@@ -58,36 +58,103 @@ async function resolveVehicleType(body, existing = {}) {
   return { vehicle_type_id: typeId, make_model: makeModel };
 }
 
+const VEHICLE_STRING_FIELDS = [
+  "owner_name",
+  "owner_phone",
+  "ownership",
+  "make_model",
+  "fuel_type",
+  "sub_vendor",
+  "engine_number",
+  "chassis_number",
+  "ac_type",
+  "gps_imei",
+  "gps_vendor",
+  "insurance_expiry",
+  "fitness_expiry",
+  "puc_expiry",
+  "tax_expiry",
+  "permit_expiry",
+  "form_42_47_expiry",
+  "form_49_expiry",
+  "attach_date",
+  "notes",
+];
+
+const VEHICLE_INSERT_COLS = `owner_name, owner_phone, ownership, make_model, vehicle_type_id, fuel_type,
+  manufacture_year, attach_date, sub_vendor, engine_number, chassis_number, ac_type,
+  gps_installed, gps_imei, gps_vendor,
+  insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry, form_42_47_expiry, form_49_expiry`;
+
+function vehicleFieldValues(f, typeRes) {
+  return [
+    f.owner_name,
+    f.owner_phone,
+    f.ownership,
+    typeRes.make_model,
+    typeRes.vehicle_type_id,
+    f.fuel_type,
+    f.manufacture_year,
+    f.attach_date,
+    f.sub_vendor,
+    f.engine_number,
+    f.chassis_number,
+    f.ac_type,
+    f.gps_installed,
+    f.gps_imei,
+    f.gps_vendor,
+    f.insurance_expiry,
+    f.fitness_expiry,
+    f.puc_expiry,
+    f.tax_expiry,
+    f.permit_expiry,
+    f.form_42_47_expiry,
+    f.form_49_expiry,
+  ];
+}
+
 function pickVehicleFields(body, existing = {}) {
   const out = {
     owner_name: existing.owner_name ?? null,
     owner_phone: existing.owner_phone ?? null,
+    ownership: existing.ownership ?? null,
     make_model: existing.make_model ?? null,
     fuel_type: existing.fuel_type ?? null,
+    manufacture_year: existing.manufacture_year ?? null,
+    attach_date: existing.attach_date ?? null,
+    sub_vendor: existing.sub_vendor ?? null,
+    engine_number: existing.engine_number ?? null,
+    chassis_number: existing.chassis_number ?? null,
+    ac_type: existing.ac_type ?? null,
+    gps_installed: existing.gps_installed != null ? Number(existing.gps_installed) : 0,
+    gps_imei: existing.gps_imei ?? null,
+    gps_vendor: existing.gps_vendor ?? null,
     insurance_expiry: existing.insurance_expiry ?? null,
     fitness_expiry: existing.fitness_expiry ?? null,
     puc_expiry: existing.puc_expiry ?? null,
     tax_expiry: existing.tax_expiry ?? null,
     permit_expiry: existing.permit_expiry ?? null,
+    form_42_47_expiry: existing.form_42_47_expiry ?? null,
+    form_49_expiry: existing.form_49_expiry ?? null,
     notes: existing.notes ?? null,
     is_active: existing.is_active != null ? Number(existing.is_active) : 1,
   };
-  for (const k of [
-    "owner_name",
-    "owner_phone",
-    "make_model",
-    "fuel_type",
-    "insurance_expiry",
-    "fitness_expiry",
-    "puc_expiry",
-    "tax_expiry",
-    "permit_expiry",
-    "notes",
-  ]) {
+  for (const k of VEHICLE_STRING_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body, k)) {
       const v = body[k];
       out[k] = v === "" || v == null ? null : String(v);
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "manufacture_year")) {
+    const y = body.manufacture_year;
+    if (y === "" || y == null) out.manufacture_year = null;
+    else {
+      const n = Number(y);
+      out.manufacture_year = Number.isFinite(n) ? n : null;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "gps_installed")) {
+    out.gps_installed = body.gps_installed === true || body.gps_installed === 1 || body.gps_installed === "1" ? 1 : 0;
   }
   if (Object.prototype.hasOwnProperty.call(body, "is_active")) {
     out.is_active = body.is_active ? 1 : 0;
@@ -190,15 +257,10 @@ admin.post("/", async (req, res) => {
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   const result = await execute(
     `INSERT INTO vehicles (
-      client_id, registration_number, owner_name, owner_phone, make_model, vehicle_type_id, fuel_type,
-      insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry,
+      client_id, registration_number, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
-    [
-      cid, reg, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
-      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
-      f.is_active, f.notes,
-    ]
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    [cid, reg, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes]
   );
   const vid = result.insertId;
   for (const smid of smIds) {
@@ -235,14 +297,13 @@ admin.patch("/:id", async (req, res) => {
   const typeRes = await resolveVehicleType(body, existing);
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   await execute(
-    `UPDATE vehicles SET client_id=?, registration_number=?, owner_name=?, owner_phone=?,
-      make_model=?, vehicle_type_id=?, fuel_type=?, insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?,
-      permit_expiry=?, is_active=?, notes=? WHERE id=?`,
-    [
-      client_id, registration_number, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
-      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
-      f.is_active, f.notes, id,
-    ]
+    `UPDATE vehicles SET client_id=?, registration_number=?,
+      owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
+      manufacture_year=?, attach_date=?, sub_vendor=?, engine_number=?, chassis_number=?, ac_type=?,
+      gps_installed=?, gps_imei=?, gps_vendor=?,
+      insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
+      form_42_47_expiry=?, form_49_expiry=?, is_active=?, notes=? WHERE id=?`,
+    [client_id, registration_number, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes, id]
   );
 
   const assignSm =
@@ -392,15 +453,10 @@ sm.post("/", async (req, res) => {
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   const result = await execute(
     `INSERT INTO vehicles (
-      client_id, registration_number, owner_name, owner_phone, make_model, vehicle_type_id, fuel_type,
-      insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry,
+      client_id, registration_number, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, submitted_by_site_manager_id, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
-    [
-      smRow.client_id, reg, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
-      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry,
-      smRow.id, f.notes,
-    ]
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    [smRow.client_id, reg, ...vehicleFieldValues(f, typeRes), smRow.id, f.notes]
   );
   res.status(201).json(
     await queryOne(
@@ -440,14 +496,14 @@ sm.patch("/:id", async (req, res) => {
   const typeRes = await resolveVehicleType(body, existing);
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
   await execute(
-    `UPDATE vehicles SET registration_number=?, owner_name=?, owner_phone=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?, notes=?,
+    `UPDATE vehicles SET registration_number=?,
+      owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
+      manufacture_year=?, attach_date=?, sub_vendor=?, engine_number=?, chassis_number=?, ac_type=?,
+      gps_installed=?, gps_imei=?, gps_vendor=?,
+      insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
+      form_42_47_expiry=?, form_49_expiry=?, notes=?,
       approval_status='draft', rejection_note=NULL WHERE id=?`,
-    [
-      registration_number, f.owner_name, f.owner_phone, typeRes.make_model, typeRes.vehicle_type_id, f.fuel_type,
-      f.insurance_expiry, f.fitness_expiry, f.puc_expiry, f.tax_expiry, f.permit_expiry, f.notes,
-      existing.id,
-    ]
+    [registration_number, ...vehicleFieldValues(f, typeRes), f.notes, existing.id]
   );
   res.json(
     await queryOne(
