@@ -27,6 +27,7 @@ export default function VehicleInfoFields({
   vehicleTypes = [],
   showVehicleType = true,
   showStatus = true,
+  showExpirySection = true,
   dense = false,
 }) {
   const set = (patch) => onChange({ ...value, ...patch });
@@ -209,67 +210,69 @@ export default function VehicleInfoFields({
         </div>
       </div>
 
-      <div>
-        <div className="text-sm font-bold text-btt-navy mb-2">Certificate & permit expiry</div>
-        <div className={grid}>
-          <Labeled label="Insurance expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.insurance_expiry || ""}
-              onChange={(e) => set({ insurance_expiry: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="Fitness certificate expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.fitness_expiry || ""}
-              onChange={(e) => set({ fitness_expiry: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="Pollution certificate expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.puc_expiry || ""}
-              onChange={(e) => set({ puc_expiry: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="42 / 47 expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.form_42_47_expiry || ""}
-              onChange={(e) => set({ form_42_47_expiry: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="49 expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.form_49_expiry || ""}
-              onChange={(e) => set({ form_49_expiry: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="Tax expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.tax_expiry || ""}
-              onChange={(e) => set({ tax_expiry: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="Permit expiry">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.permit_expiry || ""}
-              onChange={(e) => set({ permit_expiry: e.target.value })}
-            />
-          </Labeled>
+      {showExpirySection ? (
+        <div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Certificate & permit expiry</div>
+          <div className={grid}>
+            <Labeled label="Insurance expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.insurance_expiry || ""}
+                onChange={(e) => set({ insurance_expiry: e.target.value })}
+              />
+            </Labeled>
+            <Labeled label="Fitness certificate expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.fitness_expiry || ""}
+                onChange={(e) => set({ fitness_expiry: e.target.value })}
+              />
+            </Labeled>
+            <Labeled label="Pollution certificate expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.puc_expiry || ""}
+                onChange={(e) => set({ puc_expiry: e.target.value })}
+              />
+            </Labeled>
+            <Labeled label="42 / 47 expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.form_42_47_expiry || ""}
+                onChange={(e) => set({ form_42_47_expiry: e.target.value })}
+              />
+            </Labeled>
+            <Labeled label="49 expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.form_49_expiry || ""}
+                onChange={(e) => set({ form_49_expiry: e.target.value })}
+              />
+            </Labeled>
+            <Labeled label="Tax expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.tax_expiry || ""}
+                onChange={(e) => set({ tax_expiry: e.target.value })}
+              />
+            </Labeled>
+            <Labeled label="Permit expiry">
+              <input
+                className={inputCls}
+                type="date"
+                value={value.permit_expiry || ""}
+                onChange={(e) => set({ permit_expiry: e.target.value })}
+              />
+            </Labeled>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <Labeled label="Notes (optional)">
         <input

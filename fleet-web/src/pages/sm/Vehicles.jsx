@@ -383,7 +383,8 @@ export default function SmVehicles() {
       <div>
         <h1 className="text-2xl font-bold text-btt-navy">Add vehicle</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Select a vehicle, then upload documents underneath. Permit and vehicle photo are included. Other is optional.
+          Step 1: vehicle details. Step 2: upload documents and fill each expiry date there. Permit and
+          vehicle photo are included; Other is optional.
         </p>
       </div>
 
@@ -407,8 +408,13 @@ export default function SmVehicles() {
             onChange={setForm}
             vehicleTypes={vehicleTypes}
             showStatus={false}
+            showExpirySection={false}
             dense
           />
+          <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
+            Certificate expiry dates (insurance, fitness, PUC, tax, permit) are entered in the next step
+            when you upload each document.
+          </p>
           <button type="submit" className="w-full bg-btt-navy text-white rounded-xl py-3.5 text-base font-bold">
             Save & upload documents
           </button>

@@ -86,15 +86,20 @@ export default function DocUploadCard({
 
       {section.needsExpiry && (
         <label className="block mb-3">
-          <span className="text-sm font-semibold text-slate-700">Expiry date</span>
+          <span className="text-sm font-semibold text-slate-700">
+            Expiry date <span className="text-red-600">*</span>
+          </span>
           <input
             type="date"
             className="mt-1 w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base disabled:bg-slate-50"
             value={expiryValue || ""}
             onChange={(e) => onExpiryChange?.(e.target.value)}
             disabled={!canEdit || busy}
+            required
           />
-          <span className="text-xs text-slate-500 mt-1 block">Tap to open calendar and pick the date</span>
+          <span className="text-xs text-slate-500 mt-1 block">
+            Select expiry from this document before uploading
+          </span>
         </label>
       )}
 

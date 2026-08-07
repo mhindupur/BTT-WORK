@@ -53,7 +53,7 @@ export const VEHICLE_DOC_SECTIONS = [
     type: "PERMIT",
     title: "Permit",
     short: "Permit 42 / 47",
-    help: "Upload permit and select expiry date.",
+    help: "Upload permit and select the 42/47 expiry date here.",
     needsExpiry: true,
     vehicleDateField: "permit_expiry",
     recommended: true,

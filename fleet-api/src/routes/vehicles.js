@@ -564,6 +564,10 @@ sm.post("/:id/documents", uploadDoc.single("file"), async (req, res) => {
   const vehicleDateCol = DOC_TYPE_VEHICLE_DATE[docType];
   if (vehicleDateCol && expiry) {
     await execute(`UPDATE vehicles SET ${vehicleDateCol} = ? WHERE id = ?`, [expiry, existing.id]);
+    // Permit upload also fills Fleetbook 42/47 expiry when present
+    if (docType === "PERMIT") {
+      await execute(`UPDATE vehicles SET form_42_47_expiry = ? WHERE id = ?`, [expiry, existing.id]);
+    }
   }
 
   if (existing.approval_status === "rejected") {
