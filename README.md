@@ -2,6 +2,8 @@
 
 The cloud agent VM is separate from your laptop. To use `http://127.0.0.1:5174/` in your browser, start the stack **on your machine**.
 
+> **Why the cloud preview “goes down”:** one-off `node`/`vite` processes die when an agent session ends or restarts. On the cloud VM use `./scripts/cloud-up.sh` (tmux + auto-restart + watchdog). On your Mac use `./scripts/local-up.sh`. On EC2 use PM2 as in the deploy runbook.
+
 ## One-command local start
 
 **Needs:** Docker Desktop (running) + Node.js 18+
@@ -38,6 +40,15 @@ Stop:
 5. Starts API on **4000** and Vite on **5174**
 
 Logs: `.local-run/api.log`, `.local-run/web.log`
+
+## Cloud VM keep-alive
+
+```bash
+chmod +x scripts/cloud-up.sh
+./scripts/cloud-up.sh
+```
+
+This starts API + Web in **tmux** sessions with an auto-restart loop, plus a watchdog that repairs them if health checks fail.
 
 ## Manual (two terminals)
 
