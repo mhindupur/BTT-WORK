@@ -66,26 +66,37 @@ export default function AdminFuel() {
             ))}
           </ul>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 overflow-x-auto">
           <h2 className="font-semibold mb-2">Lines {selected ? `#${selected}` : ""}</h2>
           <table className="w-full text-xs">
             <thead>
               <tr className="text-left text-slate-500">
-                <th>Reg</th>
-                <th>Filled</th>
-                <th>Variance</th>
-                <th>Alert</th>
+                <th className="pr-2 py-1">Indent #</th>
+                <th className="pr-2 py-1">Reg</th>
+                <th className="pr-2 py-1">Filled</th>
+                <th className="pr-2 py-1">Variance</th>
+                <th className="py-1">Alert</th>
               </tr>
             </thead>
             <tbody>
               {lines.map((l) => (
                 <tr key={l.id} className="border-t border-slate-100">
-                  <td className="py-1">{l.vehicle_registration}</td>
-                  <td>{l.filled_amount_rs}</td>
-                  <td>{l.variance_rs}</td>
-                  <td className="text-amber-700">{l.alert_message || "—"}</td>
+                  <td className="py-1 pr-2 font-mono font-semibold text-btt-navy whitespace-nowrap">
+                    {l.indent_number || l.indent_serial || l.matched_serial || "—"}
+                  </td>
+                  <td className="py-1 pr-2 font-mono whitespace-nowrap">{l.vehicle_registration}</td>
+                  <td className="py-1 pr-2">{l.filled_amount_rs}</td>
+                  <td className="py-1 pr-2">{l.variance_rs != null ? l.variance_rs : "—"}</td>
+                  <td className="py-1 text-amber-700">{l.alert_message || "—"}</td>
                 </tr>
               ))}
+              {!lines.length && selected ? (
+                <tr>
+                  <td colSpan={5} className="py-3 text-slate-500">
+                    No lines for this upload.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

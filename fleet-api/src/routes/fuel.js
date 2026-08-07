@@ -19,7 +19,10 @@ r.get("/uploads", async (_req, res) => {
 
 r.get("/uploads/:id/lines", async (req, res) => {
   const rows = await query(
-    `SELECT l.*, i.serial_number AS matched_serial FROM fuel_recon_lines l
+    `SELECT l.*,
+       COALESCE(NULLIF(TRIM(l.indent_serial), ''), i.serial_number) AS indent_number,
+       i.serial_number AS matched_serial
+     FROM fuel_recon_lines l
      LEFT JOIN indents i ON i.id = l.matched_indent_id
      WHERE l.upload_id = ? ORDER BY l.id`,
     [req.params.id]
@@ -44,13 +47,15 @@ r.post("/uploads", upload.single("file"), async (req, res) => {
     let matchedIndentId = null;
     let variance = null;
     let alertMsg = null;
+    let indentSerial = serial || null;
     if (serial) {
       const ind = await queryOne(
-        `SELECT id, amount_rs, status FROM indents WHERE serial_number = ? AND status = 'pending'`,
+        `SELECT id, amount_rs, status, serial_number FROM indents WHERE serial_number = ? AND status = 'pending'`,
         [serial]
       );
       if (ind) {
         matchedIndentId = ind.id;
+        indentSerial = ind.serial_number || serial;
         variance = Number(ind.amount_rs) - amt;
         if (Math.abs(variance) > 0.01) {
           alertMsg = `Serial ${serial}: issued Rs ${ind.amount_rs} | fuel filled Rs ${amt} | diff Rs ${variance}`;
@@ -63,7 +68,7 @@ r.post("/uploads", upload.single("file"), async (req, res) => {
       }
     } else {
       const ind = await queryOne(
-        `SELECT id, amount_rs FROM indents i
+        `SELECT id, amount_rs, serial_number FROM indents i
          JOIN vehicles v ON v.id = i.vehicle_id
          WHERE v.registration_number = ? AND i.status = 'pending'
          ORDER BY i.created_at DESC LIMIT 1`,
@@ -71,6 +76,7 @@ r.post("/uploads", upload.single("file"), async (req, res) => {
       );
       if (ind) {
         matchedIndentId = ind.id;
+        indentSerial = ind.serial_number || null;
         variance = Number(ind.amount_rs) - amt;
         if (Math.abs(variance) > 0.01) {
           alertMsg = `${reg}: issued Rs ${ind.amount_rs} | filled Rs ${amt} | diff Rs ${variance}`;
@@ -80,11 +86,12 @@ r.post("/uploads", upload.single("file"), async (req, res) => {
       }
     }
     await execute(
-      `INSERT INTO fuel_recon_lines (upload_id, vehicle_registration, filled_amount_rs, matched_indent_id, variance_rs, alert_message, raw_row)
-       VALUES (?,?,?,?,?,?,?)`,
+      `INSERT INTO fuel_recon_lines (upload_id, vehicle_registration, indent_serial, filled_amount_rs, matched_indent_id, variance_rs, alert_message, raw_row)
+       VALUES (?,?,?,?,?,?,?,?)`,
       [
         uploadId,
         reg,
+        indentSerial,
         amt,
         matchedIndentId,
         variance,

@@ -257,6 +257,7 @@ CREATE TABLE fuel_recon_lines (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   upload_id BIGINT UNSIGNED NOT NULL,
   vehicle_registration VARCHAR(32) NOT NULL,
+  indent_serial VARCHAR(64) NULL,
   filled_amount_rs DECIMAL(12,2) NOT NULL,
   transaction_date DATE NULL,
   matched_indent_id BIGINT UNSIGNED NULL,
