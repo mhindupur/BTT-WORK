@@ -54,9 +54,39 @@ SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@d
 SET @sql := IF(@c=0, 'ALTER TABLE vehicles ADD COLUMN registration_date DATE NULL AFTER seating_capacity', 'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- Drop old per-client unique if present, add global unique on registration
+-- Drop old per-client unique (client_id, registration_number).
+-- InnoDB often uses that composite unique as the supporting index for
+-- fk_veh_client, so DROP INDEX fails with:
+--   ERROR 1553: Cannot drop index 'uq_client_vehicle': needed in a foreign key constraint
+-- Give the FK its own client_id index, drop the FK, drop the unique, restore the FK.
+SET @c := (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='vehicles' AND COLUMN_NAME='client_id'
+    AND SEQ_IN_INDEX=1 AND INDEX_NAME <> 'uq_client_vehicle'
+);
+SET @sql := IF(@c=0, 'ALTER TABLE vehicles ADD KEY ix_vehicles_client (client_id)', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @c := (
+  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='vehicles' AND CONSTRAINT_NAME='fk_veh_client'
+    AND CONSTRAINT_TYPE='FOREIGN KEY'
+);
+SET @sql := IF(@c>0, 'ALTER TABLE vehicles DROP FOREIGN KEY fk_veh_client', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
 SET @c := (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='vehicles' AND INDEX_NAME='uq_client_vehicle');
 SET @sql := IF(@c>0, 'ALTER TABLE vehicles DROP INDEX uq_client_vehicle', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @c := (
+  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='vehicles' AND CONSTRAINT_NAME='fk_veh_client'
+    AND CONSTRAINT_TYPE='FOREIGN KEY'
+);
+SET @sql := IF(@c=0,
+  'ALTER TABLE vehicles ADD CONSTRAINT fk_veh_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE',
+  'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='vehicles' AND INDEX_NAME='uq_vehicles_reg');
