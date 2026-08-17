@@ -52,7 +52,7 @@ else
     --time \
     --max-restarts 100 \
     --restart-delay 2000 \
-    -- run dev -- --host 0.0.0.0 --port 5174
+    -- run dev -- --host :: --port 5174
 fi
 
 "$PM2" save >/dev/null 2>&1 || true
