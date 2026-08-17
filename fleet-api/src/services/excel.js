@@ -30,11 +30,13 @@ function cell(obj, ...keys) {
 }
 
 export function rowVehicleReg(r) {
-  return String(
+  const raw = String(
     cell(r, "vehicle", "vehicle_number", "registration", "vehicle_registration", "reg_no", "reg") || ""
   )
     .trim()
-    .toUpperCase();
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return raw || "";
 }
 
 export function rowAmount(r) {

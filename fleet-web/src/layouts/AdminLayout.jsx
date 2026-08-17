@@ -15,7 +15,7 @@ export default function AdminLayout() {
             Dashboard
           </NavLink>
           <NavLink to="/admin/clients" className={linkCls}>
-            Clients
+            Clients / Sites
           </NavLink>
           <NavLink to="/admin/site-managers" className={linkCls}>
             Site Managers

@@ -5,6 +5,7 @@ import fs from "fs";
 import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin, requireSiteManager } from "../middleware/auth.js";
 import { normalizeVehicleRegistration } from "../utils/vehicleReg.js";
+import { assertVehicleSla, SLA_SELECT } from "../utils/vehicleSla.js";
 import { isValidDocType, VEHICLE_DOC_TYPES, DOC_TYPE_VEHICLE_DATE } from "../constants/vehicleDocs.js";
 import { notifyAdmin } from "../services/notifications.js";
 
@@ -23,7 +24,7 @@ const uploadDoc = multer({
   limits: { fileSize: 12 * 1024 * 1024 },
 });
 
-const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name, vt.name AS vehicle_type_name,
+const VEHICLE_ADMIN_ROW = `SELECT v.*, c.name AS client_name, ${SLA_SELECT}, vt.name AS vehicle_type_name,
   (SELECT GROUP_CONCAT(u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM vehicle_site_managers vsm
     JOIN site_managers sm ON sm.id = vsm.site_manager_id
     JOIN users u ON u.id = sm.user_id WHERE vsm.vehicle_id = v.id) AS site_manager_names,
@@ -78,11 +79,12 @@ const VEHICLE_STRING_FIELDS = [
   "form_42_47_expiry",
   "form_49_expiry",
   "attach_date",
+  "registration_date",
   "notes",
 ];
 
 const VEHICLE_INSERT_COLS = `owner_name, owner_phone, ownership, make_model, vehicle_type_id, fuel_type,
-  manufacture_year, attach_date, sub_vendor, engine_number, chassis_number, ac_type,
+  seating_capacity, registration_date, manufacture_year, attach_date, sub_vendor, engine_number, chassis_number, ac_type,
   gps_installed, gps_imei, gps_vendor,
   insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry, form_42_47_expiry, form_49_expiry`;
 
@@ -94,6 +96,8 @@ function vehicleFieldValues(f, typeRes) {
     typeRes.make_model,
     typeRes.vehicle_type_id,
     f.fuel_type,
+    f.seating_capacity,
+    f.registration_date,
     f.manufacture_year,
     f.attach_date,
     f.sub_vendor,
@@ -120,6 +124,8 @@ function pickVehicleFields(body, existing = {}) {
     ownership: existing.ownership ?? null,
     make_model: existing.make_model ?? null,
     fuel_type: existing.fuel_type ?? null,
+    seating_capacity: existing.seating_capacity ?? null,
+    registration_date: existing.registration_date ?? null,
     manufacture_year: existing.manufacture_year ?? null,
     attach_date: existing.attach_date ?? null,
     sub_vendor: existing.sub_vendor ?? null,
@@ -151,6 +157,14 @@ function pickVehicleFields(body, existing = {}) {
     else {
       const n = Number(y);
       out.manufacture_year = Number.isFinite(n) ? n : null;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "seating_capacity")) {
+    const s = body.seating_capacity;
+    if (s === "" || s == null) out.seating_capacity = null;
+    else {
+      const n = Number(s);
+      out.seating_capacity = Number.isFinite(n) && n >= 1 && n <= 55 ? n : null;
     }
   }
   if (Object.prototype.hasOwnProperty.call(body, "gps_installed")) {
@@ -196,6 +210,28 @@ async function smCanAccessVehicle(smId, vehicleId) {
   return { vehicle: v };
 }
 
+async function allocateVehicleSerial(clientId) {
+  const c = await queryOne("SELECT site_code FROM clients WHERE id = ?", [clientId]);
+  const code = String(c?.site_code || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 5);
+  if (code.length !== 5) {
+    return { error: "Site must have a 5-character unique code (e.g. INFNG) before adding vehicles", status: 400 };
+  }
+  const rows = await query("SELECT vehicle_serial FROM vehicles WHERE client_id = ? AND vehicle_serial LIKE ?", [
+    clientId,
+    `${code}%`,
+  ]);
+  let maxN = 0;
+  const re = new RegExp(`^${code}(\\d+)$`);
+  for (const row of rows) {
+    const m = String(row.vehicle_serial || "").match(re);
+    if (m) maxN = Math.max(maxN, Number(m[1]));
+  }
+  return { serial: `${code}${String(maxN + 1).padStart(4, "0")}` };
+}
+
 const admin = Router();
 admin.use(requireAuth, requireAdmin);
 
@@ -235,15 +271,11 @@ admin.post("/", async (req, res) => {
   const reg = normalizeVehicleRegistration(registration_number);
   if (!reg) {
     return res.status(400).json({
-      error:
-        "Invalid vehicle number. Examples: KA-01-MM-0001, KA 01 MM 0001, KA-01-0001 (no series), or KA01MM0001",
+      error: "Invalid vehicle number. Use CAPS without hyphen, e.g. KA01MM1234",
     });
   }
-  const dup = await queryOne(
-    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ?",
-    [cid, reg]
-  );
-  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+  const dup = await queryOne("SELECT id FROM vehicles WHERE registration_number = ?", [reg]);
+  if (dup) return res.status(409).json({ error: "This vehicle number is already registered" });
 
   let smIds = [];
   if (site_manager_id != null && site_manager_id !== "") smIds = [Number(site_manager_id)];
@@ -255,12 +287,18 @@ admin.post("/", async (req, res) => {
   const f = pickVehicleFields(req.body || {});
   const typeRes = await resolveVehicleType(req.body || {}, {});
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const client = await queryOne("SELECT * FROM clients WHERE id = ?", [cid]);
+  if (!client) return res.status(404).json({ error: "Site / client not found" });
+  const slaErr = assertVehicleSla(client, f);
+  if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
+  const serialRes = await allocateVehicleSerial(cid);
+  if (serialRes.error) return res.status(serialRes.status).json({ error: serialRes.error });
   const result = await execute(
     `INSERT INTO vehicles (
-      client_id, registration_number, ${VEHICLE_INSERT_COLS},
+      client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
-    [cid, reg, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes]
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    [cid, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes]
   );
   const vid = result.insertId;
   for (const smid of smIds) {
@@ -288,18 +326,23 @@ admin.patch("/:id", async (req, res) => {
   }
 
   const dup = await queryOne(
-    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ? AND id <> ?",
-    [client_id, registration_number, id]
+    "SELECT id FROM vehicles WHERE registration_number = ? AND id <> ?",
+    [registration_number, id]
   );
-  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+  if (dup) return res.status(409).json({ error: "This vehicle number is already registered" });
 
   const f = pickVehicleFields(body, existing);
   const typeRes = await resolveVehicleType(body, existing);
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const client = await queryOne("SELECT * FROM clients WHERE id = ?", [client_id]);
+  if (!client) return res.status(404).json({ error: "Site / client not found" });
+  const slaErr = assertVehicleSla(client, f);
+  if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
   await execute(
     `UPDATE vehicles SET client_id=?, registration_number=?,
       owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      manufacture_year=?, attach_date=?, sub_vendor=?, engine_number=?, chassis_number=?, ac_type=?,
+      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?,
+      engine_number=?, chassis_number=?, ac_type=?,
       gps_installed=?, gps_imei=?, gps_vendor=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
       form_42_47_expiry=?, form_49_expiry=?, is_active=?, notes=? WHERE id=?`,
@@ -408,7 +451,8 @@ sm.get("/mine", async (req, res) => {
   if (forWork) {
     return res.json(
       await query(
-        `SELECT v.*, c.name AS client_name FROM vehicles v
+        `SELECT v.*, c.name AS client_name, ${SLA_SELECT}
+         FROM vehicles v
          JOIN vehicle_site_managers vsm ON vsm.vehicle_id = v.id
          JOIN clients c ON c.id = v.client_id
          WHERE vsm.site_manager_id = ? AND v.approval_status = 'approved' AND v.is_active = 1
@@ -419,7 +463,7 @@ sm.get("/mine", async (req, res) => {
   }
   res.json(
     await query(
-      `SELECT v.*, c.name AS client_name,
+      `SELECT v.*, c.name AS client_name, ${SLA_SELECT},
          (SELECT COUNT(*) FROM vehicle_documents vd WHERE vd.vehicle_id = v.id) AS doc_count
        FROM vehicles v
        JOIN clients c ON c.id = v.client_id
@@ -441,22 +485,24 @@ sm.post("/", async (req, res) => {
     return res.status(400).json({ error: "Vehicle registration is required" });
   }
   const reg = normalizeVehicleRegistration(registration_number);
-  if (!reg) return res.status(400).json({ error: "Invalid vehicle number" });
-  const dup = await queryOne(
-    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ?",
-    [smRow.client_id, reg]
-  );
-  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+  if (!reg) return res.status(400).json({ error: "Invalid vehicle number. Use CAPS without hyphen, e.g. KA01MM1234" });
+  const dup = await queryOne("SELECT id FROM vehicles WHERE registration_number = ?", [reg]);
+  if (dup) return res.status(409).json({ error: "This vehicle number is already registered" });
 
   const f = pickVehicleFields(req.body || {});
   const typeRes = await resolveVehicleType(req.body || {}, {});
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const client = await queryOne("SELECT * FROM clients WHERE id = ?", [smRow.client_id]);
+  const slaErr = assertVehicleSla(client, f);
+  if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
+  const serialRes = await allocateVehicleSerial(smRow.client_id);
+  if (serialRes.error) return res.status(serialRes.status).json({ error: serialRes.error });
   const result = await execute(
     `INSERT INTO vehicles (
-      client_id, registration_number, ${VEHICLE_INSERT_COLS},
+      client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, submitted_by_site_manager_id, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
-    [smRow.client_id, reg, ...vehicleFieldValues(f, typeRes), smRow.id, f.notes]
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    [smRow.client_id, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), smRow.id, f.notes]
   );
   res.status(201).json(
     await queryOne(
@@ -487,18 +533,22 @@ sm.patch("/:id", async (req, res) => {
     registration_number = reg;
   }
   const dup = await queryOne(
-    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ? AND id <> ?",
-    [existing.client_id, registration_number, existing.id]
+    "SELECT id FROM vehicles WHERE registration_number = ? AND id <> ?",
+    [registration_number, existing.id]
   );
-  if (dup) return res.status(409).json({ error: "Registration already exists for this client" });
+  if (dup) return res.status(409).json({ error: "This vehicle number is already registered" });
 
   const f = pickVehicleFields(body, existing);
   const typeRes = await resolveVehicleType(body, existing);
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const client = await queryOne("SELECT * FROM clients WHERE id = ?", [existing.client_id]);
+  const slaErr = assertVehicleSla(client, f);
+  if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
   await execute(
     `UPDATE vehicles SET registration_number=?,
       owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      manufacture_year=?, attach_date=?, sub_vendor=?, engine_number=?, chassis_number=?, ac_type=?,
+      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?,
+      engine_number=?, chassis_number=?, ac_type=?,
       gps_installed=?, gps_imei=?, gps_vendor=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
       form_42_47_expiry=?, form_49_expiry=?, notes=?,

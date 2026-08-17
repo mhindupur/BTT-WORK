@@ -148,6 +148,7 @@ If upgrading an older DB only, apply additive migrations as needed:
 # mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_005_vehicle_types.sql
 # mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_006_vehicle_fleetbook_fields.sql
 # mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_007_fuel_indent_serial.sql
+# mysql -u btt -pBttFleet2026 btt_fleet < fleet-db/migration_008_site_codes_sla.sql
 ```
 
 Verify tables:

@@ -5,27 +5,16 @@ import {
   detailsFromVehicleRow,
   detailsPayload,
   emptyVehicleDetails,
+  ownershipLabel,
 } from "../../constants/vehicleFields";
-import {
-  buildRegistrationFromParts,
-  normalizeVehicleRegistration,
-  parseRegistrationToParts,
-} from "../../utils/vehicleReg";
-
-const emptyRegParts = () => ({
-  state: "KA",
-  district: "",
-  series: "",
-  number: "",
-});
+import { clientLabel, formatRegInput, isSlaExceeded, normalizeVehicleRegistration } from "../../utils/vehicleReg";
 
 const emptyForm = () => ({
   client_id: "",
   site_manager_id: "",
   vehicle_type_id: "",
+  registration_number: "",
   is_active: true,
-  pasteHint: "",
-  ...emptyRegParts(),
   ...emptyVehicleDetails(),
 });
 
@@ -73,7 +62,9 @@ export default function AdminVehicles() {
     return rows.filter((r) => {
       const hay = [
         r.registration_number,
+        r.vehicle_serial,
         r.client_name,
+        r.site_code,
         r.owner_name,
         r.owner_phone,
         r.ownership,
@@ -91,42 +82,12 @@ export default function AdminVehicles() {
     });
   }, [rows, search]);
 
-  function applyPasteToForm(paste, isEdit) {
-    const n = normalizeVehicleRegistration(paste);
-    if (!n) return false;
-    const p = parseRegistrationToParts(n);
-    if (p.unparsed) return false;
-    const patch = {
-      state: p.state,
-      district: p.district,
-      series: p.series || "",
-      number: p.number,
-      pasteHint: "",
-    };
-    if (isEdit) {
-      setEditing((e) => ({ ...e, ...patch }));
-    } else {
-      setForm((f) => ({ ...f, ...patch }));
-    }
-    return true;
-  }
-
-  function resolveRegistration(parts, pasteFallback) {
-    let reg = buildRegistrationFromParts(parts.state, parts.district, parts.series, parts.number);
-    if (!reg && pasteFallback?.trim()) {
-      reg = normalizeVehicleRegistration(pasteFallback);
-    }
-    return reg;
-  }
-
   async function create(e) {
     e.preventDefault();
     setFormErr("");
-    const reg = resolveRegistration(form, form.pasteHint);
+    const reg = normalizeVehicleRegistration(form.registration_number);
     if (!reg) {
-      setFormErr(
-        "Enter state, district, and vehicle number (series optional), or paste a full number e.g. KA-01-MM-0001 or KA01MM0001."
-      );
+      setFormErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
       return;
     }
     try {
@@ -147,18 +108,14 @@ export default function AdminVehicles() {
 
   function openEdit(row) {
     setEditErr("");
-    const p = parseRegistrationToParts(row.registration_number);
     setEditing({
       id: row.id,
       client_id: String(row.client_id),
       site_manager_id: row.site_manager_id != null ? String(row.site_manager_id) : "",
       vehicle_type_id: row.vehicle_type_id != null ? String(row.vehicle_type_id) : "",
+      registration_number: formatRegInput(row.registration_number),
+      vehicle_serial: row.vehicle_serial || "",
       is_active: row.is_active !== 0 && row.is_active !== false,
-      pasteHint: p.unparsed ? row.registration_number : "",
-      state: p.unparsed ? "KA" : p.state,
-      district: p.unparsed ? "" : p.district,
-      series: p.unparsed ? "" : p.series || "",
-      number: p.unparsed ? "" : p.number,
       ...detailsFromVehicleRow(row),
     });
   }
@@ -166,11 +123,9 @@ export default function AdminVehicles() {
   async function saveEdit(e) {
     e.preventDefault();
     setEditErr("");
-    const reg = resolveRegistration(editing, editing.pasteHint);
+    const reg = normalizeVehicleRegistration(editing.registration_number);
     if (!reg) {
-      setEditErr(
-        "Enter state, district, and vehicle number (series optional), or paste a full number."
-      );
+      setEditErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
       return;
     }
     try {
@@ -189,9 +144,6 @@ export default function AdminVehicles() {
     }
   }
 
-  const previewAdd = resolveRegistration(form, form.pasteHint);
-  const previewEdit = editing ? resolveRegistration(editing, editing.pasteHint) : null;
-
   return (
     <div>
       <h1 className="text-2xl font-bold text-btt-navy mb-4">Vehicles</h1>
@@ -201,9 +153,8 @@ export default function AdminVehicles() {
         className="bg-white p-4 rounded-xl border border-slate-200 mb-6 space-y-4 shadow-sm"
       >
         <p className="text-sm text-slate-600">
-          Vehicle number supports Indian-style plates: <strong>KA-01-MM-0001</strong> or without series{" "}
-          <strong>KA-01-0001</strong>. You can type parts below, or paste values like{" "}
-          <span className="font-mono">KA 01 MM 0001</span> / <span className="font-mono">KA01MM0001</span>.
+          Vehicle number is stored in CAPS with no hyphen, e.g. <span className="font-mono font-semibold">KA01MM1234</span>.
+          Each vehicle number is unique. Site serial (e.g. INFNG0001) is assigned automatically.
         </p>
 
         <div className="grid md:grid-cols-2 gap-3">
@@ -222,7 +173,7 @@ export default function AdminVehicles() {
             <option value="">Client / site *</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {clientLabel(c)}
               </option>
             ))}
           </select>
@@ -242,70 +193,16 @@ export default function AdminVehicles() {
           </select>
         </div>
 
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/80 space-y-3">
-          <div className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">State (2 letters)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 font-mono uppercase"
-                maxLength={2}
-                value={form.state}
-                onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase().slice(0, 2) })}
-                placeholder="KA"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">District (2 digits)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 font-mono"
-                value={form.district}
-                onChange={(e) => setForm({ ...form, district: e.target.value.replace(/\D/g, "").slice(0, 2) })}
-                placeholder="01"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Series (optional)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 font-mono uppercase"
-                value={form.series}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    series: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3),
-                  })
-                }
-                placeholder="MM"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Number (1–4 digits)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 font-mono"
-                value={form.number}
-                onChange={(e) => setForm({ ...form, number: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                placeholder="1"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Or paste full number</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 font-mono"
-              value={form.pasteHint}
-              onChange={(e) => setForm({ ...form, pasteHint: e.target.value })}
-              onBlur={() => {
-                if (form.pasteHint.trim()) applyPasteToForm(form.pasteHint, false);
-              }}
-              placeholder="KA-01-MM-0001, KA01MM0001, KA-01-0001…"
-            />
-          </div>
-          {previewAdd && (
-            <p className="text-sm text-slate-700">
-              Stored as: <span className="font-mono font-semibold text-btt-navy">{previewAdd}</span>
-            </p>
-          )}
-        </div>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
+          <input
+            className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
+            placeholder="KA01MM1234"
+            value={form.registration_number}
+            onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
+            required
+          />
+        </label>
 
         <VehicleInfoFields value={form} onChange={setForm} vehicleTypes={vehicleTypes} />
 
@@ -318,12 +215,13 @@ export default function AdminVehicles() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="px-4 py-3 border-b bg-slate-50 space-y-2">
           <div className="text-xs text-slate-600">
-            Rows in <span className="font-semibold text-amber-800">amber</span> are waiting for document / vehicle
-            review.
+            Rows in <span className="font-semibold text-amber-800">amber</span> await review. Rows in{" "}
+            <span className="font-semibold text-orange-800">orange</span> exceed the site SLA age — remove them
+            manually if needed.
           </div>
           <input
             className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Search registration, owner, chassis, engine, type…"
+            placeholder="Search registration, serial, owner, chassis, type…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -332,6 +230,7 @@ export default function AdminVehicles() {
           <thead className="bg-slate-50">
             <tr>
               <th className="text-left p-3">Reg</th>
+              <th className="text-left p-3">Serial</th>
               <th className="text-left p-3">Type / year</th>
               <th className="text-left p-3">Ownership</th>
               <th className="text-left p-3">Status</th>
@@ -345,30 +244,40 @@ export default function AdminVehicles() {
             {filteredRows.map((v) => {
               const pending = v.approval_status === "pending_review";
               const rejected = v.approval_status === "rejected";
+              const slaOver = isSlaExceeded(v);
               return (
                 <tr
                   key={v.id}
                   className={`border-t border-slate-100 ${
-                    pending
-                      ? "bg-amber-50 ring-1 ring-inset ring-amber-200"
-                      : rejected
-                        ? "bg-red-50/60"
-                        : ""
+                    slaOver
+                      ? "bg-orange-100 ring-1 ring-inset ring-orange-300"
+                      : pending
+                        ? "bg-amber-50 ring-1 ring-inset ring-amber-200"
+                        : rejected
+                          ? "bg-red-50/60"
+                          : ""
                   }`}
                 >
                   <td className="p-3 font-mono font-medium">
                     {v.registration_number}
+                    {slaOver ? (
+                      <span className="ml-2 inline-block align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-orange-600 text-white">
+                        Over SLA age
+                      </span>
+                    ) : null}
                     {pending ? (
                       <span className="ml-2 inline-block align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500 text-white">
                         Review pending
                       </span>
                     ) : null}
                   </td>
+                  <td className="p-3 font-mono text-xs">{v.vehicle_serial || "—"}</td>
                   <td className="p-3">
                     {v.vehicle_type_name || v.make_model || "—"}
                     {v.manufacture_year ? ` · ${v.manufacture_year}` : ""}
+                    {v.seating_capacity ? ` · ${v.seating_capacity}s` : ""}
                   </td>
-                  <td className="p-3">{v.ownership || "—"}</td>
+                  <td className="p-3">{ownershipLabel(v.ownership)}</td>
                   <td className="p-3">
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
@@ -386,7 +295,10 @@ export default function AdminVehicles() {
                         : v.approval_status || "—"}
                     </span>
                   </td>
-                  <td className="p-3">{v.client_name}</td>
+                  <td className="p-3">
+                    {v.client_name}
+                    {v.site_code ? ` (${v.site_code})` : ""}
+                  </td>
                   <td className="p-3">
                     {v.owner_name} {v.owner_phone ? `· ${v.owner_phone}` : ""}
                   </td>
@@ -415,7 +327,7 @@ export default function AdminVehicles() {
             })}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={8} className="p-4 text-slate-500">
+                <td colSpan={9} className="p-4 text-slate-500">
                   {rows.length ? "No vehicles match your search." : "No vehicles yet."}
                 </td>
               </tr>
@@ -453,7 +365,7 @@ export default function AdminVehicles() {
               >
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {clientLabel(c)}
                   </option>
                 ))}
               </select>
@@ -472,66 +384,21 @@ export default function AdminVehicles() {
                 ))}
               </select>
 
-              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="border rounded-lg px-2 py-2 font-mono uppercase text-sm"
-                    maxLength={2}
-                    value={editing.state}
-                    onChange={(e) =>
-                      setEditing({ ...editing, state: e.target.value.toUpperCase().slice(0, 2) })
-                    }
-                    placeholder="KA"
-                  />
-                  <input
-                    className="border rounded-lg px-2 py-2 font-mono text-sm"
-                    value={editing.district}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        district: e.target.value.replace(/\D/g, "").slice(0, 2),
-                      })
-                    }
-                    placeholder="01"
-                  />
-                  <input
-                    className="border rounded-lg px-2 py-2 font-mono uppercase text-sm"
-                    value={editing.series}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        series: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3),
-                      })
-                    }
-                    placeholder="MM (opt)"
-                  />
-                  <input
-                    className="border rounded-lg px-2 py-2 font-mono text-sm"
-                    value={editing.number}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        number: e.target.value.replace(/\D/g, "").slice(0, 4),
-                      })
-                    }
-                    placeholder="0001"
-                  />
-                </div>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Vehicle number *</span>
                 <input
-                  className="w-full border rounded-lg px-2 py-2 font-mono text-sm"
-                  value={editing.pasteHint}
-                  onChange={(e) => setEditing({ ...editing, pasteHint: e.target.value })}
-                  onBlur={() => {
-                    if (editing.pasteHint.trim()) applyPasteToForm(editing.pasteHint, true);
-                  }}
-                  placeholder="Or paste full number"
+                  className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
+                  value={editing.registration_number}
+                  onChange={(e) =>
+                    setEditing({ ...editing, registration_number: formatRegInput(e.target.value) })
+                  }
                 />
-                {previewEdit && (
-                  <p className="text-xs text-slate-600">
-                    Stored as: <span className="font-mono font-semibold">{previewEdit}</span>
-                  </p>
-                )}
-              </div>
+              </label>
+              {editing.vehicle_serial ? (
+                <p className="text-sm text-slate-600">
+                  Serial: <span className="font-mono font-semibold">{editing.vehicle_serial}</span>
+                </p>
+              ) : null}
 
               <VehicleInfoFields value={editing} onChange={setEditing} vehicleTypes={vehicleTypes} dense />
 

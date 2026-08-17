@@ -27,11 +27,18 @@ SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE clients (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  site_code CHAR(5) NOT NULL,
   email VARCHAR(255) NULL,
   phone VARCHAR(64) NULL,
   address TEXT NULL,
+  latitude DECIMAL(10,7) NULL,
+  longitude DECIMAL(10,7) NULL,
+  start_date DATE NULL,
+  vendor_type ENUM('SINGLE','MULTIPLE') NULL,
+  sla_max_age_years SMALLINT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_clients_site_code (site_code),
   KEY ix_clients_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -76,27 +83,23 @@ CREATE TABLE vehicle_types (
 
 INSERT INTO vehicle_types (name, code, sort_order) VALUES
   ('Sedan', 'SEDAN', 10),
-  ('SUV', 'SUV', 20),
-  ('Hatchback', 'HATCH', 30),
-  ('MUV / MPV', 'MUV', 40),
-  ('Tempo Traveller (TT)', 'TT', 50),
-  ('Mini Bus', 'MINIBUS', 60),
-  ('Bus', 'BUS', 70),
-  ('Van', 'VAN', 80),
-  ('Truck / LCV', 'TRUCK', 90),
-  ('Electric Cab', 'EV', 100),
-  ('Other', 'OTHER', 900);
+  ('SUV/MPV', 'SUVMPV', 20),
+  ('TT/Mini BUS', 'TTMINIBUS', 30),
+  ('BUS', 'BUS', 40);
 
 CREATE TABLE vehicles (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   client_id BIGINT UNSIGNED NOT NULL,
   registration_number VARCHAR(32) NOT NULL,
+  vehicle_serial VARCHAR(32) NULL,
   owner_name VARCHAR(255) NULL,
   owner_phone VARCHAR(64) NULL,
   ownership VARCHAR(32) NULL,
   make_model VARCHAR(255) NULL,
   vehicle_type_id BIGINT UNSIGNED NULL,
   fuel_type VARCHAR(32) NULL,
+  seating_capacity TINYINT UNSIGNED NULL,
+  registration_date DATE NULL,
   manufacture_year SMALLINT UNSIGNED NULL,
   attach_date DATE NULL,
   sub_vendor VARCHAR(255) NULL,
@@ -124,7 +127,8 @@ CREATE TABLE vehicles (
   notes TEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_client_vehicle (client_id, registration_number),
+  UNIQUE KEY uq_vehicles_reg (registration_number),
+  UNIQUE KEY uq_vehicles_serial (vehicle_serial),
   KEY ix_vehicles_reg (registration_number),
   KEY ix_vehicles_approval (approval_status),
   KEY ix_vehicles_type (vehicle_type_id),

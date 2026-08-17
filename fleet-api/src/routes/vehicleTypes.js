@@ -6,16 +6,9 @@ const r = Router();
 
 const DEFAULT_TYPES = [
   ["Sedan", "SEDAN", 10],
-  ["SUV", "SUV", 20],
-  ["Hatchback", "HATCH", 30],
-  ["MUV / MPV", "MUV", 40],
-  ["Tempo Traveller (TT)", "TT", 50],
-  ["Mini Bus", "MINIBUS", 60],
-  ["Bus", "BUS", 70],
-  ["Van", "VAN", 80],
-  ["Truck / LCV", "TRUCK", 90],
-  ["Electric Cab", "EV", 100],
-  ["Other", "OTHER", 900],
+  ["SUV/MPV", "SUVMPV", 20],
+  ["TT/Mini BUS", "TTMINIBUS", 30],
+  ["BUS", "BUS", 40],
 ];
 
 /** Ensure known defaults exist (safe to call repeatedly). */

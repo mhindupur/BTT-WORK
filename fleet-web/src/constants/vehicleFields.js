@@ -1,10 +1,9 @@
-/** Fleetbook-parity vehicle detail options and empty form defaults. */
+/** Vehicle detail options and empty form defaults. */
 
 export const OWNERSHIP_OPTIONS = [
-  { value: "OWNED", label: "Owned" },
+  { value: "OWN", label: "Own" },
+  { value: "DCO", label: "DCO" },
   { value: "ATTACHED", label: "Attached" },
-  { value: "HIRED", label: "Hired" },
-  { value: "LEASED", label: "Leased" },
 ];
 
 export const FUEL_TYPE_OPTIONS = [
@@ -12,6 +11,7 @@ export const FUEL_TYPE_OPTIONS = [
   { value: "PET", label: "Petrol" },
   { value: "CNG", label: "CNG" },
   { value: "ELE", label: "Electric" },
+  { value: "HYB", label: "Hybrid (Petrol-Electric)" },
 ];
 
 export const AC_TYPE_OPTIONS = [
@@ -24,12 +24,23 @@ export const GPS_OPTIONS = [
   { value: "1", label: "Yes" },
 ];
 
+export const SEATING_CAPACITY_MAX = 55;
+
+export const SEATING_OPTIONS = Array.from({ length: SEATING_CAPACITY_MAX }, (_, i) => i + 1);
+
+export const VENDOR_TYPE_OPTIONS = [
+  { value: "SINGLE", label: "Single" },
+  { value: "MULTIPLE", label: "Multiple" },
+];
+
 /** Extra vehicle info fields (beyond registration / client / type). */
 export const emptyVehicleDetails = () => ({
   ownership: "",
   owner_name: "",
   owner_phone: "",
   fuel_type: "",
+  seating_capacity: "",
+  registration_date: "",
   manufacture_year: "",
   attach_date: "",
   sub_vendor: "",
@@ -56,12 +67,12 @@ export function detailsFromVehicleRow(row = {}) {
       d.gps_installed = row.gps_installed ? "1" : "0";
       continue;
     }
-    if (k.endsWith("_expiry") || k === "attach_date") {
+    if (k.endsWith("_expiry") || k === "attach_date" || k === "registration_date") {
       d[k] = row[k] ? String(row[k]).slice(0, 10) : "";
       continue;
     }
-    if (k === "manufacture_year") {
-      d[k] = row.manufacture_year != null && row.manufacture_year !== "" ? String(row.manufacture_year) : "";
+    if (k === "manufacture_year" || k === "seating_capacity") {
+      d[k] = row[k] != null && row[k] !== "" ? String(row[k]) : "";
       continue;
     }
     d[k] = row[k] != null ? String(row[k]) : "";
@@ -77,6 +88,11 @@ export function detailsPayload(form) {
     owner_name: nullIfEmpty(form.owner_name),
     owner_phone: nullIfEmpty(form.owner_phone),
     fuel_type: nullIfEmpty(form.fuel_type),
+    seating_capacity:
+      form.seating_capacity === "" || form.seating_capacity == null
+        ? null
+        : Number(form.seating_capacity),
+    registration_date: nullIfEmpty(form.registration_date),
     manufacture_year:
       form.manufacture_year === "" || form.manufacture_year == null
         ? null
@@ -98,4 +114,12 @@ export function detailsPayload(form) {
     form_49_expiry: nullIfEmpty(form.form_49_expiry),
     notes: nullIfEmpty(form.notes),
   };
+}
+
+export function fuelLabel(code) {
+  return FUEL_TYPE_OPTIONS.find((o) => o.value === code)?.label || code || "—";
+}
+
+export function ownershipLabel(code) {
+  return OWNERSHIP_OPTIONS.find((o) => o.value === code)?.label || code || "—";
 }

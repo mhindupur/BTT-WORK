@@ -1,99 +1,74 @@
-/** Build canonical reg from parts (matches fleet-api normalization). */
+/**
+ * Canonical vehicle number: CAPS, no hyphen/space. Example: KA01MM1234
+ */
 
-export function padNum(numStr) {
+function padNum(numStr) {
   const d = String(numStr || "").replace(/\D/g, "");
   if (!d) return null;
   return d.padStart(4, "0").slice(-4);
 }
 
-export function buildRegistrationFromParts(state, district, series, number) {
-  const st = String(state || "")
+export function normalizeVehicleRegistration(input) {
+  if (input == null) return null;
+  const compact = String(input)
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 2);
-  const dRaw = String(district || "").replace(/\D/g, "");
-  if (st.length !== 2 || !dRaw) return null;
-  const dist = dRaw.padStart(2, "0").slice(-2);
-  if (!/^\d{2}$/.test(dist)) return null;
+    .replace(/[^A-Z0-9]/g, "");
+  if (!compact) return null;
+  const m = compact.match(/^([A-Z]{2})(\d{2})([A-Z]{0,3})(\d{1,4})$/);
+  if (!m) return null;
+  const n = padNum(m[4]);
+  if (!n) return null;
+  return `${m[1]}${m[2]}${m[3]}${n}`;
+}
 
-  const ser = String(series || "")
+export function formatRegInput(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 11);
+}
+
+export function normalizeSiteCode(input) {
+  const c = String(input || "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 3);
-
-  const n = padNum(number);
-  if (!n) return null;
-
-  if (ser) return `${st}-${dist}-${ser}-${n}`;
-  return `${st}-${dist}-${n}`;
+    .slice(0, 5);
+  return c.length === 5 ? c : null;
 }
 
-export function parseRegistrationToParts(canonical) {
-  const u = String(canonical || "").trim().toUpperCase();
-  const m4 = u.match(/^([A-Z]{2})-(\d{2})-([A-Z0-9]{1,3})-(\d{1,4})$/);
-  if (m4) {
-    return {
-      state: m4[1],
-      district: m4[2],
-      series: m4[3],
-      number: String(parseInt(m4[4], 10)),
-    };
-  }
-  const m3 = u.match(/^([A-Z]{2})-(\d{2})-(\d{1,4})$/);
-  if (m3) {
-    return {
-      state: m3[1],
-      district: m3[2],
-      series: "",
-      number: String(parseInt(m3[3], 10)),
-    };
-  }
-  return {
-    state: "KA",
-    district: "",
-    series: "",
-    number: "",
-    unparsed: u,
-  };
-}
-
-/** Same rules as API — for paste / preview. */
-export function normalizeVehicleRegistration(input) {
-  if (input == null) return null;
-  const s = String(input).trim();
-  if (!s) return null;
-
-  const normalized = s
+export function formatSiteCodeInput(value) {
+  return String(value || "")
     .toUpperCase()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-  const parts = normalized.split("-").map((p) => p.trim()).filter(Boolean);
-  if (parts.length >= 3) {
-    const state = parts[0].replace(/[^A-Z]/g, "").slice(0, 2);
-    if (state.length !== 2) return null;
-    const dRaw = parts[1].replace(/\D/g, "");
-    if (!dRaw) return null;
-    const district = dRaw.padStart(2, "0").slice(-2);
-    if (parts.length === 3) {
-      const n = padNum(parts[2]);
-      if (!n) return null;
-      return `${state}-${district}-${n}`;
-    }
-    const series = parts[2].replace(/[^A-Z0-9]/g, "").slice(0, 3);
-    if (!series) return null;
-    const n = padNum(parts.slice(3).join(""));
-    if (!n) return null;
-    return `${state}-${district}-${series}-${n}`;
-  }
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 5);
+}
 
-  const c = s.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const m = c.match(/^([A-Z]{2})(\d{2})([A-Z]{0,3})(\d{1,4})$/);
-  if (!m) return null;
-  const [, st, dist, ser, num] = m;
-  const n = padNum(num);
-  if (!n) return null;
-  if (!ser) return `${st}-${dist}-${n}`;
-  return `${st}-${dist}-${ser}-${n}`;
+export function clientLabel(c) {
+  if (!c) return "";
+  return c.site_code ? `${c.name} (${c.site_code})` : c.name;
+}
+
+export function vehicleAgeYears(registrationDate, manufactureYear, asOf = new Date()) {
+  let start = null;
+  if (registrationDate) {
+    const s = String(registrationDate).slice(0, 10);
+    start = new Date(`${s}T00:00:00`);
+  } else if (manufactureYear) {
+    start = new Date(Number(manufactureYear), 0, 1);
+  }
+  if (!start || Number.isNaN(start.getTime())) return null;
+  let years = asOf.getFullYear() - start.getFullYear();
+  const m = asOf.getMonth() - start.getMonth();
+  if (m < 0 || (m === 0 && asOf.getDate() < start.getDate())) years -= 1;
+  return years;
+}
+
+export function isSlaExceeded(row) {
+  if (row?.sla_exceeded === true || row?.sla_exceeded === 1) return true;
+  const sla = row?.sla_max_age_years;
+  if (sla == null || sla === "" || Number(sla) <= 0) return false;
+  const age = vehicleAgeYears(row.registration_date, row.manufacture_year);
+  return age != null && age >= Number(sla);
 }

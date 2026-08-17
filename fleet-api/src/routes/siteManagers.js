@@ -9,7 +9,7 @@ r.use(requireAuth, requireAdmin);
 r.get("/", async (_req, res) => {
   const rows = await query(
     `SELECT sm.id, sm.client_id, sm.location_label, sm.user_id,
-            u.email, u.full_name, u.phone, c.name AS client_name
+            u.email, u.full_name, u.phone, c.name AS client_name, c.site_code
      FROM site_managers sm
      JOIN users u ON u.id = sm.user_id
      JOIN clients c ON c.id = sm.client_id

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api";
+import { clientLabel } from "../../utils/vehicleReg";
 
 export default function AdminSiteManagers() {
   const [rows, setRows] = useState([]);
@@ -155,8 +156,8 @@ export default function AdminSiteManagers() {
           <option value="">Client *</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
+                {clientLabel(c)}
+              </option>
           ))}
         </select>
         <input
@@ -194,7 +195,10 @@ export default function AdminSiteManagers() {
               <tr key={r.id} className="border-t border-slate-100">
                 <td className="p-3">{r.full_name}</td>
                 <td className="p-3">{r.email}</td>
-                <td className="p-3">{r.client_name}</td>
+                <td className="p-3">
+                  {r.client_name}
+                  {r.site_code ? ` (${r.site_code})` : ""}
+                </td>
                 <td className="p-3">{r.location_label}</td>
                 <td className="p-3">
                   <div className="flex flex-wrap gap-2">

@@ -3,6 +3,7 @@ import {
   FUEL_TYPE_OPTIONS,
   GPS_OPTIONS,
   OWNERSHIP_OPTIONS,
+  SEATING_OPTIONS,
 } from "../constants/vehicleFields";
 
 const inputCls = "w-full border rounded-lg px-3 py-2 bg-white";
@@ -92,6 +93,28 @@ export default function VehicleInfoFields({
                 </option>
               ))}
             </select>
+          </Labeled>
+          <Labeled label="Seating capacity">
+            <select
+              className={inputCls}
+              value={value.seating_capacity || ""}
+              onChange={(e) => set({ seating_capacity: e.target.value })}
+            >
+              <option value="">Select</option>
+              {SEATING_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} seater{n === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+          </Labeled>
+          <Labeled label="Date of registration">
+            <input
+              className={inputCls}
+              type="date"
+              value={value.registration_date || ""}
+              onChange={(e) => set({ registration_date: e.target.value })}
+            />
           </Labeled>
           <Labeled label="AC / Non-AC">
             <select

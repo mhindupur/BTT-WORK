@@ -31,8 +31,8 @@ async function main() {
   let client = await queryOne("SELECT id FROM clients WHERE name = ?", [clientName]);
   if (!client) {
     const cr = await execute(
-      "INSERT INTO clients (name, email, phone, address) VALUES (?,?,?,?)",
-      [clientName, "demo-client@btt.example", "+919999000001", "Bengaluru, Karnataka"]
+      "INSERT INTO clients (name, site_code, email, phone, address) VALUES (?,?,?,?,?)",
+      [clientName, "DEMOC", "demo-client@btt.example", "+919999000001", "Bengaluru, Karnataka"]
     );
     client = { id: cr.insertId };
   }
@@ -55,15 +55,15 @@ async function main() {
   }
   console.log("[seed] Supervisor / Site manager login:", smEmail, "/", smPass);
 
-  const reg = "KA-01-AB-1234";
+  const reg = "KA01AB1234";
   let vehicle = await queryOne(
-    "SELECT id FROM vehicles WHERE client_id = ? AND registration_number = ?",
-    [client.id, reg]
+    "SELECT id FROM vehicles WHERE registration_number = ?",
+    [reg]
   );
   if (!vehicle) {
     const vr = await execute(
-      "INSERT INTO vehicles (client_id, registration_number, owner_name, owner_phone) VALUES (?,?,?,?)",
-      [client.id, reg, "Suresh Patil", "+919988776655"]
+      "INSERT INTO vehicles (client_id, registration_number, vehicle_serial, owner_name, owner_phone) VALUES (?,?,?,?,?)",
+      [client.id, reg, "DEMOC0001", "Suresh Patil", "+919988776655"]
     );
     vehicle = { id: vr.insertId };
   }
@@ -84,7 +84,7 @@ async function main() {
   try {
     const { ensureDefaultVehicleTypes } = await import("./routes/vehicleTypes.js");
     await ensureDefaultVehicleTypes();
-    console.log("[seed] Vehicle types ready (Sedan, SUV, TT, Bus, …).");
+    console.log("[seed] Vehicle types ready (Sedan, SUV/MPV, TT/Mini BUS, BUS).");
   } catch (err) {
     console.warn(
       "[seed] Skipped vehicle types (apply fleet-db/migration_005_vehicle_types.sql if table missing):",

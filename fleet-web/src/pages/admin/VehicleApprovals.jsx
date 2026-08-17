@@ -212,6 +212,10 @@ export default function AdminVehicleApprovals() {
 
           <div className="grid sm:grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 border border-slate-200 p-4">
             <div>
+              <span className="text-slate-500">Serial</span>
+              <div className="font-semibold font-mono">{selected.vehicle_serial || "—"}</div>
+            </div>
+            <div>
               <span className="text-slate-500">Ownership</span>
               <div className="font-semibold">{selected.ownership || "—"}</div>
             </div>
@@ -231,8 +235,12 @@ export default function AdminVehicleApprovals() {
               </div>
             </div>
             <div>
-              <span className="text-slate-500">Fuel</span>
-              <div className="font-semibold">{selected.fuel_type || "—"}</div>
+              <span className="text-slate-500">Date of registration</span>
+              <div className="font-semibold">{dateStr(selected.registration_date)}</div>
+            </div>
+            <div>
+              <span className="text-slate-500">Seating</span>
+              <div className="font-semibold">{selected.seating_capacity ? `${selected.seating_capacity} seater` : "—"}</div>
             </div>
             <div>
               <span className="text-slate-500">AC</span>

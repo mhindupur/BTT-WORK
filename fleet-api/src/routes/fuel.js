@@ -4,6 +4,7 @@ import path from "path";
 import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { parseSheetRows, rowVehicleReg, rowAmount, rowSerial } from "../services/excel.js";
+import { normalizeVehicleRegistration } from "../utils/vehicleReg.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 const r = Router();
@@ -40,7 +41,7 @@ r.post("/uploads", upload.single("file"), async (req, res) => {
   const uploadId = ures.insertId;
   const alerts = [];
   for (const row of data) {
-    const reg = rowVehicleReg(row);
+    const reg = normalizeVehicleRegistration(rowVehicleReg(row)) || rowVehicleReg(row);
     const amt = rowAmount(row);
     const serial = rowSerial(row);
     if (!reg || amt == null || Number.isNaN(amt)) continue;
@@ -70,7 +71,7 @@ r.post("/uploads", upload.single("file"), async (req, res) => {
       const ind = await queryOne(
         `SELECT id, amount_rs, serial_number FROM indents i
          JOIN vehicles v ON v.id = i.vehicle_id
-         WHERE v.registration_number = ? AND i.status = 'pending'
+         WHERE REPLACE(REPLACE(UPPER(v.registration_number), '-', ''), ' ', '') = ? AND i.status = 'pending'
          ORDER BY i.created_at DESC LIMIT 1`,
         [reg]
       );

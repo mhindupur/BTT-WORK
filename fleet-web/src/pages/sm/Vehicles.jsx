@@ -6,6 +6,7 @@ import {
   detailsPayload,
   emptyVehicleDetails,
 } from "../../constants/vehicleFields";
+import { formatRegInput, isSlaExceeded, normalizeVehicleRegistration } from "../../utils/vehicleReg";
 import {
   APPROVAL_STATUS_LABEL,
   OPTIONAL_DOC_SECTIONS,
@@ -120,6 +121,7 @@ export default function SmVehicles() {
     return rows.filter((r) => {
       const hay = [
         r.registration_number,
+        r.vehicle_serial,
         r.owner_name,
         r.ownership,
         r.engine_number,
@@ -152,8 +154,13 @@ export default function SmVehicles() {
     setErr("");
     setMsg("");
     try {
+      const reg = normalizeVehicleRegistration(form.registration_number);
+      if (!reg) {
+        setErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
+        return;
+      }
       const { data } = await api.post("/sm/vehicles", {
-        registration_number: form.registration_number,
+        registration_number: reg,
         vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
         ...detailsPayload(form),
       });
@@ -396,10 +403,10 @@ export default function SmVehicles() {
           <h2 className="text-lg font-bold text-btt-navy">Step 1 — Vehicle details</h2>
           <Field label="Vehicle number (Reg No) *">
             <input
-              className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base uppercase"
-              placeholder="e.g. KA01AB1234"
+              className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base uppercase font-mono"
+              placeholder="KA01MM1234"
               value={form.registration_number}
-              onChange={(e) => setForm({ ...form, registration_number: e.target.value.toUpperCase() })}
+              onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
               required
             />
           </Field>
@@ -449,10 +456,18 @@ export default function SmVehicles() {
           {filteredRows.map((r) => {
             const isOpen = Number(selectedId) === Number(r.id);
             return (
-              <li key={r.id} className={`p-3 ${isOpen ? "bg-amber-50/80" : ""}`}>
+              <li key={r.id} className={`p-3 ${isOpen ? "bg-amber-50/80" : isSlaExceeded(r) ? "bg-orange-50" : ""}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div className="font-bold text-btt-navy">{r.registration_number}</div>
+                    <div className="font-bold text-btt-navy font-mono">{r.registration_number}</div>
+                    {r.vehicle_serial ? (
+                      <div className="text-xs font-mono text-slate-600">Serial {r.vehicle_serial}</div>
+                    ) : null}
+                    {isSlaExceeded(r) ? (
+                      <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-orange-600 text-white">
+                        Over SLA age
+                      </span>
+                    ) : null}
                     <span
                       className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${STATUS_BADGE[r.approval_status]}`}
                     >
