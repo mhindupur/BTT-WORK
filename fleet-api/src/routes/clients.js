@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { query, queryOne, execute } from "../db.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { normalizeSiteCode } from "../utils/vehicleReg.js";
@@ -15,7 +16,16 @@ const CLIENT_COLS = `c.id, c.name, c.site_code, c.email, c.phone, c.address, c.l
     WHERE cam.client_id = c.id) AS account_manager_names,
   (SELECT GROUP_CONCAT(cam.user_id ORDER BY cam.user_id)
      FROM client_account_managers cam
-    WHERE cam.client_id = c.id) AS account_manager_user_ids`;
+    WHERE cam.client_id = c.id) AS account_manager_user_ids,
+  (SELECT sm.id FROM site_managers sm WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_id,
+  (SELECT u.full_name FROM site_managers sm JOIN users u ON u.id = sm.user_id
+    WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_name,
+  (SELECT u.email FROM site_managers sm JOIN users u ON u.id = sm.user_id
+    WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_email,
+  (SELECT u.phone FROM site_managers sm JOIN users u ON u.id = sm.user_id
+    WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_phone,
+  (SELECT sm.location_label FROM site_managers sm
+    WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_location`;
 
 function pickClientFields(body, existing = {}) {
   const out = {
@@ -75,7 +85,19 @@ function parseAmUserIds(body) {
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? [n] : [];
   }
-  return null; // not provided
+  return null;
+}
+
+function pickSiteManager(body) {
+  const sm = body.site_manager || null;
+  if (!sm || typeof sm !== "object") return null;
+  return {
+    email: sm.email ? String(sm.email).trim().toLowerCase() : "",
+    full_name: sm.full_name ? String(sm.full_name).trim() : "",
+    phone: sm.phone ? String(sm.phone).trim() : null,
+    password: sm.password != null ? String(sm.password) : "",
+    location_label: sm.location_label ? String(sm.location_label).trim() : null,
+  };
 }
 
 async function assertAccountManagers(ids) {
@@ -97,6 +119,57 @@ async function syncAccountManagers(clientId, userIds) {
       uid,
     ]);
   }
+}
+
+async function createSiteManagerForClient(clientId, sm) {
+  if (!sm.email || !sm.full_name) {
+    return { error: "site_manager.email and site_manager.full_name required", status: 400 };
+  }
+  if (!sm.password || sm.password.length < 6) {
+    return { error: "site_manager.password required (min 6 characters)", status: 400 };
+  }
+  const exists = await queryOne("SELECT id FROM users WHERE email = ?", [sm.email]);
+  if (exists) return { error: "Site manager email already in use", status: 409 };
+  const hash = await bcrypt.hash(sm.password, 10);
+  const ures = await execute(
+    "INSERT INTO users (email, password_hash, role, full_name, phone) VALUES (?,?,?,?,?)",
+    [sm.email, hash, "site_manager", sm.full_name, sm.phone]
+  );
+  await execute("INSERT INTO site_managers (user_id, client_id, location_label) VALUES (?,?,?)", [
+    ures.insertId,
+    clientId,
+    sm.location_label,
+  ]);
+  return { ok: true, user_id: ures.insertId };
+}
+
+async function updatePrimarySiteManager(clientId, sm) {
+  const existing = await queryOne(
+    "SELECT sm.id, sm.user_id FROM site_managers sm WHERE sm.client_id = ? ORDER BY sm.id ASC LIMIT 1",
+    [clientId]
+  );
+  if (!existing) {
+    if (!sm) return null;
+    return createSiteManagerForClient(clientId, sm);
+  }
+  if (!sm) return null;
+  if (sm.full_name || sm.phone != null) {
+    await execute(
+      "UPDATE users SET full_name = COALESCE(?, full_name), phone = COALESCE(?, phone) WHERE id = ?",
+      [sm.full_name || null, sm.phone, existing.user_id]
+    );
+  }
+  if (sm.location_label != null) {
+    await execute("UPDATE site_managers SET location_label = ? WHERE id = ?", [
+      sm.location_label,
+      existing.id,
+    ]);
+  }
+  if (sm.password && sm.password.length >= 6) {
+    const hash = await bcrypt.hash(sm.password, 10);
+    await execute("UPDATE users SET password_hash = ? WHERE id = ?", [hash, existing.user_id]);
+  }
+  return { ok: true, user_id: existing.user_id };
 }
 
 function enrichClientRow(row) {
@@ -127,6 +200,13 @@ r.post("/", async (req, res) => {
   const amErr = await assertAccountManagers(amIds);
   if (amErr) return res.status(amErr.status).json({ error: amErr.error });
 
+  const sm = pickSiteManager(body);
+  if (!sm) {
+    return res.status(400).json({
+      error: "site_manager required — email, full_name, password (min 6)",
+    });
+  }
+
   const result = await execute(
     `INSERT INTO clients (name, site_code, email, phone, address, latitude, longitude, start_date, vendor_type, sla_max_age_years)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -143,9 +223,17 @@ r.post("/", async (req, res) => {
       f.sla_max_age_years,
     ]
   );
-  if (amIds.length) await syncAccountManagers(result.insertId, amIds);
+  const clientId = result.insertId;
+  if (amIds.length) await syncAccountManagers(clientId, amIds);
+
+  const smRes = await createSiteManagerForClient(clientId, sm);
+  if (smRes.error) {
+    await execute("DELETE FROM clients WHERE id = ?", [clientId]);
+    return res.status(smRes.status).json({ error: smRes.error });
+  }
+
   res.status(201).json(
-    enrichClientRow(await queryOne(`SELECT ${CLIENT_COLS} FROM clients c WHERE c.id = ?`, [result.insertId]))
+    enrichClientRow(await queryOne(`SELECT ${CLIENT_COLS} FROM clients c WHERE c.id = ?`, [clientId]))
   );
 });
 
@@ -188,6 +276,13 @@ r.patch("/:id", async (req, res) => {
     ]
   );
   if (amIds) await syncAccountManagers(existing.id, amIds);
+
+  const sm = pickSiteManager(body);
+  if (sm) {
+    const smRes = await updatePrimarySiteManager(existing.id, sm);
+    if (smRes?.error) return res.status(smRes.status).json({ error: smRes.error });
+  }
+
   res.json(
     enrichClientRow(await queryOne(`SELECT ${CLIENT_COLS} FROM clients c WHERE c.id = ?`, [existing.id]))
   );

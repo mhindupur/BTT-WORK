@@ -15,19 +15,19 @@ export default function AdminLayout() {
             Dashboard
           </NavLink>
           <NavLink to="/admin/clients" className={linkCls}>
-            Sites &amp; Vehicles
+            Sites
           </NavLink>
-          <NavLink to="/admin/site-managers" className={linkCls}>
-            Site Managers
+          <NavLink to="/admin/vehicles" className={linkCls}>
+            Vehicles
+          </NavLink>
+          <NavLink to="/admin/vehicle-approvals" className={linkCls}>
+            Vehicle approvals
           </NavLink>
           <NavLink to="/admin/account-managers" className={linkCls}>
             Account Managers
           </NavLink>
           <NavLink to="/admin/vehicle-types" className={linkCls}>
             Vehicle types
-          </NavLink>
-          <NavLink to="/admin/vehicle-approvals" className={linkCls}>
-            Vehicle approvals
           </NavLink>
           <NavLink to="/admin/indents" className={linkCls}>
             Indents

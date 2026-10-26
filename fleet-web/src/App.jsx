@@ -7,7 +7,6 @@ import SmLayout from "./layouts/SmLayout";
 import AmLayout from "./layouts/AmLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminClients from "./pages/admin/Clients";
-import AdminSiteManagers from "./pages/admin/SiteManagers";
 import AdminAccountManagers from "./pages/admin/AccountManagers";
 import AdminVehicles from "./pages/admin/Vehicles";
 import AdminIndents from "./pages/admin/Indents";
@@ -46,7 +45,7 @@ export default function App() {
       >
         <Route index element={<AdminDashboard />} />
         <Route path="clients" element={<AdminClients />} />
-        <Route path="site-managers" element={<AdminSiteManagers />} />
+        <Route path="site-managers" element={<Navigate to="/admin/clients" replace />} />
         <Route path="account-managers" element={<AdminAccountManagers />} />
         <Route path="vehicles" element={<AdminVehicles />} />
         <Route path="vehicle-types" element={<AdminVehicleTypes />} />
