@@ -46,6 +46,18 @@ const NAV = [
       </Icon>
     ),
   },
+  {
+    to: "/am/reports",
+    label: "Reports",
+    icon: (
+      <Icon>
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <path d="M14 2v6h6" />
+        <path d="M8 13h8" />
+        <path d="M8 17h5" />
+      </Icon>
+    ),
+  },
 ];
 
 const linkCls = ({ isActive }) =>

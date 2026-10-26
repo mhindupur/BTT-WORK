@@ -21,6 +21,7 @@ import MyIndents from "./pages/sm/MyIndents";
 import SmVehicles from "./pages/sm/Vehicles";
 import AmDashboard from "./pages/am/AmDashboard";
 import AmSites from "./pages/am/AmSites";
+import AmReports from "./pages/am/AmReports";
 
 function Guard({ role, children }) {
   const { user, ready } = useAuth();
@@ -78,6 +79,7 @@ export default function App() {
       >
         <Route index element={<AmDashboard />} />
         <Route path="sites" element={<AmSites />} />
+        <Route path="reports" element={<AmReports />} />
       </Route>
       <Route path="/" element={<Navigate to="/login" replace />} />
     </Routes>

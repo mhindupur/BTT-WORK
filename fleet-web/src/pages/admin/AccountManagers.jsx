@@ -21,6 +21,7 @@ export default function AdminAccountManagers() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [search, setSearch] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
 
   async function load() {
     const [am, cl] = await Promise.all([api.get("/account-managers"), api.get("/clients")]);
@@ -92,8 +93,11 @@ export default function AdminAccountManagers() {
         password: form.password,
         client_ids: form.client_ids.map(Number),
       });
-      setMsg(`Account manager created for ${form.email}. They have view-only access to assigned sites.`);
+      setMsg(
+        `Account manager created for ${form.email}. They can sign in with view-only access to the selected sites and the site managers under those sites.`
+      );
       setForm({ email: "", full_name: "", phone: "", password: "", client_ids: [] });
+      setShowAdd(false);
       load();
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
@@ -134,9 +138,11 @@ export default function AdminAccountManagers() {
   }
 
   const siteChecklist = (selected, onChangeSelected) => (
-    <div className="md:col-span-2 border rounded-lg p-3 max-h-40 overflow-y-auto space-y-1 bg-slate-50">
-      <div className="text-xs font-semibold text-slate-600 mb-1">Assigned sites (view access)</div>
-      {!clients.length && <p className="text-xs text-slate-500">No sites yet — create a site first.</p>}
+    <div className="md:col-span-2 border rounded-lg p-3 max-h-48 overflow-y-auto space-y-1 bg-slate-50">
+      <div className="text-xs font-semibold text-slate-600 mb-1">
+        Assign sites (required for access) — site managers at these sites report under this account manager
+      </div>
+      {!clients.length && <p className="text-xs text-slate-500">No sites yet — create a site first under Sites.</p>}
       {clients.map((c) => {
         const sid = String(c.id);
         return (
@@ -146,7 +152,12 @@ export default function AdminAccountManagers() {
               checked={selected.includes(sid)}
               onChange={() => onChangeSelected(toggleIn(selected, sid))}
             />
-            <span>{clientLabel(c)}</span>
+            <span>
+              {clientLabel(c)}
+              {c.site_manager_name ? (
+                <span className="text-slate-500"> — SM: {c.site_manager_name}</span>
+              ) : null}
+            </span>
           </label>
         );
       })}
@@ -155,47 +166,84 @@ export default function AdminAccountManagers() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-btt-navy mb-1">Account Managers</h1>
-      <p className="text-sm text-slate-600 mb-4">
-        BTT assigns sites to an account manager. They can view site and vehicle information only (no edits).
-        Only admin can set or reset their password.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-btt-navy">Account Managers</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            Create the <strong>account_manager</strong> role user and assign one or more sites. They get
+            view-only access: all assigned sites, switch into a site, see site managers &amp; vehicles, and
+            export Excel reports. Only admin can set or reset their password.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${
+            showAdd ? "border border-slate-300 bg-white text-slate-700" : "bg-btt-navy text-white"
+          }`}
+          onClick={() => {
+            setShowAdd((v) => !v);
+            setErr("");
+            if (showAdd) setForm({ email: "", full_name: "", phone: "", password: "", client_ids: [] });
+          }}
+          aria-expanded={showAdd}
+        >
+          {showAdd ? "Hide add form" : "Add account manager"}
+        </button>
+      </div>
       {msg && <p className="mb-3 text-sm text-green-700">{msg}</p>}
       {err && <p className="mb-3 text-sm text-red-700">{err}</p>}
 
-      <form onSubmit={create} className="bg-white p-4 rounded-xl border border-slate-200 mb-6 grid md:grid-cols-2 gap-3">
-        <input
-          className="border rounded-lg px-3 py-2"
-          placeholder="Full name *"
-          value={form.full_name}
-          onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-          required
-        />
-        <input
-          className="border rounded-lg px-3 py-2"
-          type="email"
-          placeholder="Email *"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          required
-        />
-        <input
-          className="border rounded-lg px-3 py-2"
-          placeholder="Phone"
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-        />
-        <PasswordInput
-          placeholder="Password * (min 6)"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-          required
-        />
-        {siteChecklist(form.client_ids, (next) => setForm({ ...form, client_ids: next }))}
-        <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 md:col-span-2">
-          Create account manager
-        </button>
-      </form>
+      {showAdd && (
+        <form
+          onSubmit={create}
+          className="bg-white p-4 rounded-xl border border-slate-200 mb-6 grid md:grid-cols-2 gap-3 shadow-sm"
+        >
+          <div className="md:col-span-2 text-sm font-semibold text-btt-navy">New account manager</div>
+          <input
+            className="border rounded-lg px-3 py-2"
+            placeholder="Full name *"
+            value={form.full_name}
+            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+            required
+          />
+          <input
+            className="border rounded-lg px-3 py-2"
+            type="email"
+            placeholder="Email *"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            required
+          />
+          <input
+            className="border rounded-lg px-3 py-2"
+            placeholder="Phone"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          />
+          <PasswordInput
+            placeholder="Password * (min 6)"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            required
+          />
+          {siteChecklist(form.client_ids, (next) => setForm({ ...form, client_ids: next }))}
+          <div className="md:col-span-2 flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-slate-300"
+              onClick={() => {
+                setShowAdd(false);
+                setForm({ email: "", full_name: "", phone: "", password: "", client_ids: [] });
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
+              Create account manager
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <ListToolbar
