@@ -1,6 +1,6 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { execute, queryOne } from "./db.js";
+import { execute, queryOne, pool } from "./db.js";
 
 /**
  * Idempotent demo seed (proposal: Admin + Site Manager / Supervisor).
@@ -122,7 +122,17 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(async () => {
+    await pool.end();
+    process.exit(0);
+  })
+  .catch(async (e) => {
+    console.error(e);
+    try {
+      await pool.end();
+    } catch {
+      /* ignore */
+    }
+    process.exit(1);
+  });

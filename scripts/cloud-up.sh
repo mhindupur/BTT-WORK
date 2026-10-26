@@ -11,7 +11,11 @@ mkdir -p "$ROOT/.local-run" "$ROOT/.tools"
 PM2="$ROOT/.tools/node_modules/.bin/pm2"
 if [[ ! -x "$PM2" ]]; then
   echo "Installing local pm2..."
-  (cd "$ROOT/.tools" && npm init -y >/dev/null 2>&1 && npm install pm2@latest --silent)
+  mkdir -p "$ROOT/.tools"
+  if [[ ! -f "$ROOT/.tools/package.json" ]]; then
+    printf '%s\n' '{"name":"btt-local-tools","private":true,"version":"1.0.0"}' > "$ROOT/.tools/package.json"
+  fi
+  (cd "$ROOT/.tools" && npm install pm2@latest --silent)
 fi
 
 # MySQL
