@@ -42,9 +42,29 @@ function Field({ label, children }) {
   );
 }
 
+function matchesSearch(r, q) {
+  if (!q) return true;
+  const hay = [
+    r.registration_number,
+    r.vehicle_serial,
+    r.owner_name,
+    r.ownership,
+    r.engine_number,
+    r.chassis_number,
+    r.make_model,
+    r.vehicle_type_name,
+    r.approval_status,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
 export default function SmVehicles() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(() => emptyForm());
+  const [showAdd, setShowAdd] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [docs, setDocs] = useState([]);
   const [expiryByType, setExpiryByType] = useState({});
@@ -115,27 +135,19 @@ export default function SmVehicles() {
     return map;
   }, [docs]);
 
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
-      const hay = [
-        r.registration_number,
-        r.vehicle_serial,
-        r.owner_name,
-        r.ownership,
-        r.engine_number,
-        r.chassis_number,
-        r.make_model,
-        r.vehicle_type_name,
-        r.approval_status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [rows, search]);
+  const q = search.trim().toLowerCase();
+  const approvedRows = useMemo(
+    () => rows.filter((r) => r.approval_status === "approved" && matchesSearch(r, q)),
+    [rows, q]
+  );
+  const attentionRows = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          ["draft", "pending_review", "rejected"].includes(r.approval_status) && matchesSearch(r, q)
+      ),
+    [rows, q]
+  );
 
   const uploadedPrimary = PRIMARY_DOC_SECTIONS.filter((s) => docsByType[s.type]).length;
   const currentSection = activeSections[Math.min(docStep, Math.max(activeSections.length - 1, 0))];
@@ -148,6 +160,11 @@ export default function SmVehicles() {
     setDocStep(idx >= 0 ? idx : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  function resetAddForm() {
+    setForm(emptyForm());
+    setShowAdd(false);
+  }
 
   async function create(e) {
     e.preventDefault();
@@ -166,6 +183,7 @@ export default function SmVehicles() {
       });
       setMsg(`Vehicle ${data.registration_number} saved. Upload documents below.`);
       setForm(emptyForm());
+      setShowAdd(false);
       setSelectedId(data.id);
       setDocStep(0);
       await load();
@@ -225,6 +243,18 @@ export default function SmVehicles() {
       await load();
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  function toggleSelect(id) {
+    if (Number(selectedId) === Number(id)) {
+      setSelectedId(null);
+    } else {
+      setSelectedId(id);
+      setMsg("");
+      setErr("");
+      setDocStep(0);
+      setShowAdd(false);
     }
   }
 
@@ -385,22 +415,87 @@ export default function SmVehicles() {
     );
   }
 
+  function renderVehicleRow(r) {
+    const isOpen = Number(selectedId) === Number(r.id);
+    const needsDocs = ["draft", "rejected", "pending_review"].includes(r.approval_status);
+    return (
+      <li key={r.id} className={`p-3 ${isOpen ? "bg-amber-50/80" : isSlaExceeded(r) ? "bg-orange-50" : ""}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-bold text-btt-navy font-mono">{r.registration_number}</div>
+            {r.vehicle_serial ? (
+              <div className="text-xs font-mono text-slate-600">Serial {r.vehicle_serial}</div>
+            ) : null}
+            {isSlaExceeded(r) ? (
+              <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-orange-600 text-white">
+                Over SLA age
+              </span>
+            ) : null}
+            <span
+              className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${STATUS_BADGE[r.approval_status]}`}
+            >
+              {APPROVAL_STATUS_LABEL[r.approval_status] || r.approval_status}
+            </span>
+            <div className="text-xs text-slate-500 mt-1">
+              {r.make_model || r.vehicle_type_name || "—"} · {r.doc_count || 0} doc(s)
+              {r.owner_name ? ` · ${r.owner_name}` : ""}
+            </div>
+          </div>
+          {needsDocs ? (
+            <button
+              type="button"
+              className={`px-3 py-2 rounded-xl font-semibold text-sm ${
+                isOpen ? "bg-slate-700 text-white" : "bg-btt-accent text-white"
+              }`}
+              onClick={() => toggleSelect(r.id)}
+            >
+              {isOpen ? "Hide uploads" : "Upload docs"}
+            </button>
+          ) : null}
+        </div>
+        {isOpen ? renderUploadPanel() : null}
+      </li>
+    );
+  }
+
   return (
-    <div className="space-y-6 max-w-xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-btt-navy">Add vehicle</h1>
-        <p className="text-sm text-slate-600 mt-1">
-          Step 1: vehicle details. Step 2: upload documents and fill each expiry date there. Permit and
-          vehicle photo are included; Other is optional.
-        </p>
+    <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-btt-navy">Vehicles</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            Approved vehicles for your site are listed below. Use <strong>Add vehicle</strong> to submit a
+            new one for admin review.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold ${
+            showAdd ? "border border-slate-300 bg-white text-slate-700" : "bg-btt-navy text-white"
+          }`}
+          onClick={() => {
+            setShowAdd((v) => !v);
+            setErr("");
+            setMsg("");
+            if (showAdd) setForm(emptyForm());
+            else setSelectedId(null);
+          }}
+          aria-expanded={showAdd}
+        >
+          {showAdd ? "Hide add form" : "Add vehicle"}
+        </button>
       </div>
 
       {err && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">{err}</div>}
       {msg && <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
 
-      {!selectedId && (
-        <form onSubmit={create} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
-          <h2 className="text-lg font-bold text-btt-navy">Step 1 — Vehicle details</h2>
+      {showAdd && (
+        <form onSubmit={create} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-sm">
+          <h2 className="text-lg font-bold text-btt-navy">New vehicle</h2>
+          <p className="text-sm text-slate-600">
+            Step 1: vehicle details. After save, upload documents and expiry dates. Permit and vehicle
+            photo are included; Other is optional.
+          </p>
           <Field label="Vehicle number (Reg No) *">
             <input
               className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base uppercase font-mono"
@@ -419,94 +514,59 @@ export default function SmVehicles() {
             dense
           />
           <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
-            Certificate expiry dates (insurance, fitness, PUC, tax, permit) are entered in the next step
-            when you upload each document.
+            Certificate expiry dates (insurance, fitness, PUC, tax, permit) are entered when you upload
+            each document.
           </p>
-          <button type="submit" className="w-full bg-btt-navy text-white rounded-xl py-3.5 text-base font-bold">
-            Save & upload documents
-          </button>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              className="px-4 py-2.5 rounded-xl border border-slate-300 font-medium"
+              onClick={resetAddForm}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="bg-btt-navy text-white rounded-xl py-2.5 px-4 font-semibold">
+              Save & upload documents
+            </button>
+          </div>
         </form>
       )}
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="p-3 border-b space-y-2">
-          <div className="font-bold text-btt-navy flex justify-between items-center">
-            <span>My vehicles</span>
-            {selectedId ? (
-              <button
-                type="button"
-                className="text-xs font-semibold text-btt-accent"
-                onClick={() => {
-                  setSelectedId(null);
-                  setForm(emptyForm());
-                }}
-              >
-                + Add another
-              </button>
-            ) : null}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="p-3 border-b bg-slate-50 space-y-2">
+          <div className="font-bold text-btt-navy">
+            Approved vehicles ({rows.filter((r) => r.approval_status === "approved").length})
           </div>
           <input
-            className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm"
-            placeholder="Search vehicle number, owner, type…"
+            className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white"
+            placeholder="Search registration, serial, owner, type…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <ul className="divide-y">
-          {filteredRows.map((r) => {
-            const isOpen = Number(selectedId) === Number(r.id);
-            return (
-              <li key={r.id} className={`p-3 ${isOpen ? "bg-amber-50/80" : isSlaExceeded(r) ? "bg-orange-50" : ""}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-btt-navy font-mono">{r.registration_number}</div>
-                    {r.vehicle_serial ? (
-                      <div className="text-xs font-mono text-slate-600">Serial {r.vehicle_serial}</div>
-                    ) : null}
-                    {isSlaExceeded(r) ? (
-                      <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-orange-600 text-white">
-                        Over SLA age
-                      </span>
-                    ) : null}
-                    <span
-                      className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${STATUS_BADGE[r.approval_status]}`}
-                    >
-                      {APPROVAL_STATUS_LABEL[r.approval_status] || r.approval_status}
-                    </span>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {r.make_model || "—"} · {r.doc_count || 0} doc(s)
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`px-3 py-2 rounded-xl font-semibold text-sm ${
-                      isOpen ? "bg-slate-700 text-white" : "bg-btt-accent text-white"
-                    }`}
-                    onClick={() => {
-                      if (isOpen) {
-                        setSelectedId(null);
-                      } else {
-                        setSelectedId(r.id);
-                        setMsg("");
-                        setErr("");
-                        setDocStep(0);
-                      }
-                    }}
-                  >
-                    {isOpen ? "Hide uploads" : "Upload docs"}
-                  </button>
-                </div>
-                {isOpen ? renderUploadPanel() : null}
-              </li>
-            );
-          })}
-          {!filteredRows.length && (
+          {approvedRows.map(renderVehicleRow)}
+          {!approvedRows.length && (
             <li className="p-4 text-slate-500 text-sm">
-              {rows.length ? "No vehicles match your search." : "No vehicles yet."}
+              {rows.some((r) => r.approval_status === "approved")
+                ? "No approved vehicles match your search."
+                : "No approved vehicles yet. Click Add vehicle to submit one."}
             </li>
           )}
         </ul>
       </div>
+
+      {attentionRows.length > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden shadow-sm">
+          <div className="p-3 border-b bg-amber-50">
+            <div className="font-bold text-amber-950">Needs attention ({attentionRows.length})</div>
+            <p className="text-xs text-amber-900/80 mt-0.5">
+              Draft, pending review, or rejected — upload documents and send for approval.
+            </p>
+          </div>
+          <ul className="divide-y">{attentionRows.map(renderVehicleRow)}</ul>
+        </div>
+      )}
     </div>
   );
 }

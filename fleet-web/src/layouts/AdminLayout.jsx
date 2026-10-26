@@ -149,10 +149,10 @@ const linkCls = ({ isActive }) =>
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   return (
-    <div className="min-h-screen flex">
-      <aside className="w-60 bg-btt-navy text-slate-100 flex flex-col shrink-0">
-        <div className="p-4 font-bold border-b border-white/10 tracking-wide">BTT Admin</div>
-        <nav className="p-2 flex flex-col gap-0.5">
+    <div className="h-[100dvh] min-h-0 flex overflow-hidden">
+      <aside className="w-60 bg-btt-navy text-slate-100 flex flex-col shrink-0 h-full">
+        <div className="p-4 font-bold border-b border-white/10 tracking-wide shrink-0">BTT Admin</div>
+        <nav className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={linkCls}>
               {item.icon}
@@ -160,14 +160,14 @@ export default function AdminLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto p-4 text-xs border-t border-white/10">
+        <div className="shrink-0 p-4 text-xs border-t border-white/10 bg-btt-navy">
           <div className="truncate opacity-80">{user?.email}</div>
           <button type="button" onClick={logout} className="mt-2 text-amber-200 hover:underline">
             Log out
           </button>
         </div>
       </aside>
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-6 overflow-auto min-h-0 min-w-0">
         <Outlet />
       </main>
     </div>
