@@ -82,6 +82,7 @@ export default function AdminClients() {
   const [rows, setRows] = useState([]);
   const [accountManagers, setAccountManagers] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -108,6 +109,7 @@ export default function AdminClients() {
       await api.post("/clients", sitePayload(form, { includeSmPassword: true }));
       setMsg("Site and site manager created. Account manager linked if selected.");
       setForm(emptyForm());
+      setShowAdd(false);
       load();
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
@@ -287,26 +289,67 @@ export default function AdminClients() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-btt-navy mb-1">Sites</h1>
-      <p className="text-sm text-slate-600 mb-4">
-        Add a site and its site manager in one form. Choose an account manager to give them view access.
-        Vehicles are managed separately under Vehicles (usually submitted by the site manager for admin
-        approval).
-      </p>
-      {msg && <p className="mb-3 text-sm text-green-700">{msg}</p>}
-      {err && <p className="mb-3 text-sm text-red-700">{err}</p>}
-
-      <form
-        onSubmit={create}
-        className="bg-white p-4 rounded-xl border border-slate-200 mb-6 grid md:grid-cols-2 gap-3"
-      >
-        {siteFields(form, setForm, { createMode: true })}
-        <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 md:col-span-2">
-          Add site
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-btt-navy">Sites</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            All sites are listed below. Use <strong>Add site</strong> when you need to create a site with
+            its site manager and optional account manager.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${
+            showAdd
+              ? "border border-slate-300 bg-white text-slate-700"
+              : "bg-btt-navy text-white"
+          }`}
+          onClick={() => {
+            setShowAdd((v) => !v);
+            setErr("");
+            if (showAdd) setForm(emptyForm());
+          }}
+          aria-expanded={showAdd}
+        >
+          {showAdd ? "Hide add form" : "Add site"}
         </button>
-      </form>
+      </div>
+
+      {msg && <p className="mb-3 text-sm text-green-700">{msg}</p>}
+      {err && showAdd && <p className="mb-3 text-sm text-red-700">{err}</p>}
+
+      {showAdd && (
+        <form
+          onSubmit={create}
+          className="bg-white p-4 rounded-xl border border-slate-200 mb-6 grid md:grid-cols-2 gap-3 shadow-sm"
+        >
+          <div className="md:col-span-2 text-sm font-semibold text-btt-navy">
+            New site + site manager
+          </div>
+          {siteFields(form, setForm, { createMode: true })}
+          <div className="md:col-span-2 flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-slate-300"
+              onClick={() => {
+                setShowAdd(false);
+                setForm(emptyForm());
+                setErr("");
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="bg-btt-navy text-white rounded-lg px-4 py-2 font-medium">
+              Save site
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-3 border-b bg-slate-50 text-sm font-semibold text-slate-700">
+          All sites ({rows.length})
+        </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
@@ -345,7 +388,7 @@ export default function AdminClients() {
             {!rows.length && (
               <tr>
                 <td colSpan={6} className="p-4 text-slate-500">
-                  No sites yet.
+                  No sites yet. Click <strong>Add site</strong> to create the first one.
                 </td>
               </tr>
             )}
