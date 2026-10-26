@@ -18,11 +18,19 @@ const emptyForm = () => ({
   ...emptyVehicleDetails(),
 });
 
+function smForSite(clients, clientId) {
+  const c = clients.find((x) => String(x.id) === String(clientId));
+  if (!c?.site_manager_id) return { id: "", label: "No site manager linked to this site" };
+  const name = c.site_manager_name || "Site manager";
+  const email = c.site_manager_email ? ` — ${c.site_manager_email}` : "";
+  return { id: String(c.site_manager_id), label: `${name}${email}` };
+}
+
 export default function AdminVehicles() {
   const [rows, setRows] = useState([]);
   const [clients, setClients] = useState([]);
-  const [managers, setManagers] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [showAdd, setShowAdd] = useState(false);
   const [formErr, setFormErr] = useState("");
   const [editing, setEditing] = useState(null);
   const [editErr, setEditErr] = useState("");
@@ -30,15 +38,13 @@ export default function AdminVehicles() {
   const [search, setSearch] = useState("");
 
   async function load() {
-    const [v, c, sm, vt] = await Promise.all([
+    const [v, c, vt] = await Promise.all([
       api.get("/admin/vehicles"),
       api.get("/clients"),
-      api.get("/site-managers"),
       api.get("/vehicle-types"),
     ]);
     setRows(v.data);
     setClients(c.data);
-    setManagers(sm.data);
     setVehicleTypes(vt.data);
   }
 
@@ -46,15 +52,11 @@ export default function AdminVehicles() {
     load().catch(console.error);
   }, []);
 
-  const managersForClient = useMemo(() => {
-    if (!form.client_id) return [];
-    return managers.filter((m) => String(m.client_id) === String(form.client_id));
-  }, [managers, form.client_id]);
-
-  const managersForEditClient = useMemo(() => {
-    if (!editing?.client_id) return [];
-    return managers.filter((m) => String(m.client_id) === String(editing.client_id));
-  }, [managers, editing?.client_id]);
+  const formSm = useMemo(() => smForSite(clients, form.client_id), [clients, form.client_id]);
+  const editSm = useMemo(
+    () => smForSite(clients, editing?.client_id),
+    [clients, editing?.client_id]
+  );
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -82,6 +84,15 @@ export default function AdminVehicles() {
     });
   }, [rows, search]);
 
+  function onSiteChange(clientId, setState, current) {
+    const sm = smForSite(clients, clientId);
+    setState({
+      ...current,
+      client_id: clientId,
+      site_manager_id: sm.id,
+    });
+  }
+
   async function create(e) {
     e.preventDefault();
     setFormErr("");
@@ -90,16 +101,19 @@ export default function AdminVehicles() {
       setFormErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
       return;
     }
+    const sm = smForSite(clients, form.client_id);
     try {
       await api.post("/admin/vehicles", {
         client_id: Number(form.client_id),
         registration_number: reg,
         vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
-        site_manager_id: form.site_manager_id === "" ? null : Number(form.site_manager_id),
+        site_manager_id: sm.id ? Number(sm.id) : null,
         is_active: form.is_active !== false,
         ...detailsPayload(form),
       });
       setForm(emptyForm());
+      setShowAdd(false);
+      setFormErr("");
       load();
     } catch (ex) {
       setFormErr(ex.response?.data?.error || ex.message);
@@ -108,10 +122,11 @@ export default function AdminVehicles() {
 
   function openEdit(row) {
     setEditErr("");
+    const sm = smForSite(clients, row.client_id);
     setEditing({
       id: row.id,
       client_id: String(row.client_id),
-      site_manager_id: row.site_manager_id != null ? String(row.site_manager_id) : "",
+      site_manager_id: sm.id || (row.site_manager_id != null ? String(row.site_manager_id) : ""),
       vehicle_type_id: row.vehicle_type_id != null ? String(row.vehicle_type_id) : "",
       registration_number: formatRegInput(row.registration_number),
       vehicle_serial: row.vehicle_serial || "",
@@ -128,12 +143,13 @@ export default function AdminVehicles() {
       setEditErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
       return;
     }
+    const sm = smForSite(clients, editing.client_id);
     try {
       await api.patch(`/admin/vehicles/${editing.id}`, {
         client_id: Number(editing.client_id),
         registration_number: reg,
         vehicle_type_id: editing.vehicle_type_id === "" ? null : Number(editing.vehicle_type_id),
-        site_manager_id: editing.site_manager_id === "" ? null : Number(editing.site_manager_id),
+        site_manager_id: sm.id ? Number(sm.id) : null,
         is_active: editing.is_active !== false,
         ...detailsPayload(editing),
       });
@@ -146,86 +162,111 @@ export default function AdminVehicles() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-btt-navy mb-1">Vehicles</h1>
-      <p className="text-sm text-slate-600 mb-4">
-        Site managers normally add vehicles and documents for review. Use{" "}
-        <a className="text-btt-navy font-medium underline" href="/admin/vehicle-approvals">
-          Vehicle approvals
-        </a>{" "}
-        to approve or reject. Admin can still add a vehicle here when needed.
-      </p>
-
-      <form
-        onSubmit={create}
-        className="bg-white p-4 rounded-xl border border-slate-200 mb-6 space-y-4 shadow-sm"
-      >
-        <p className="text-sm text-slate-600">
-          Vehicle number is stored in CAPS with no hyphen, e.g.{" "}
-          <span className="font-mono font-semibold">KA01MM1234</span>. Each vehicle number is unique. Site
-          serial (e.g. INFNG0001) is assigned automatically.
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-3">
-          <select
-            className="border rounded-lg px-3 py-2"
-            value={form.client_id}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                client_id: e.target.value,
-                site_manager_id: "",
-              })
-            }
-            required
-          >
-            <option value="">Client / site *</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {clientLabel(c)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="border rounded-lg px-3 py-2"
-            value={form.site_manager_id}
-            onChange={(e) => setForm({ ...form, site_manager_id: e.target.value })}
-            disabled={!form.client_id}
-          >
-            <option value="">Site manager (optional)</option>
-            {managersForClient.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.full_name} — {m.email}
-              </option>
-            ))}
-          </select>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-btt-navy">Vehicles</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            All vehicles are listed below. Site managers normally submit vehicles for review — use{" "}
+            <a className="text-btt-navy font-medium underline" href="/admin/vehicle-approvals">
+              Vehicle approvals
+            </a>
+            . Use <strong>Add vehicle</strong> only when admin needs to add one.
+          </p>
         </div>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
-          <input
-            className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
-            placeholder="KA01MM1234"
-            value={form.registration_number}
-            onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
-            required
-          />
-        </label>
-
-        <VehicleInfoFields value={form} onChange={setForm} vehicleTypes={vehicleTypes} />
-
-        {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
-        <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
-          Add vehicle
+        <button
+          type="button"
+          className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${
+            showAdd ? "border border-slate-300 bg-white text-slate-700" : "bg-btt-navy text-white"
+          }`}
+          onClick={() => {
+            setShowAdd((v) => !v);
+            setFormErr("");
+            if (showAdd) setForm(emptyForm());
+          }}
+          aria-expanded={showAdd}
+        >
+          {showAdd ? "Hide add form" : "Add vehicle"}
         </button>
-      </form>
+      </div>
+
+      {showAdd && (
+        <form
+          onSubmit={create}
+          className="bg-white p-4 rounded-xl border border-slate-200 mb-6 space-y-4 shadow-sm"
+        >
+          <div className="text-sm font-semibold text-btt-navy">New vehicle</div>
+          <p className="text-sm text-slate-600">
+            Vehicle number in CAPS with no hyphen, e.g.{" "}
+            <span className="font-mono font-semibold">KA01MM1234</span>. Site serial is assigned
+            automatically. Site manager is loaded from the selected site.
+          </p>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.client_id}
+              onChange={(e) => onSiteChange(e.target.value, setForm, form)}
+              required
+            >
+              <option value="">Site *</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {clientLabel(c)}
+                </option>
+              ))}
+            </select>
+
+            <div className="border rounded-lg px-3 py-2 bg-slate-50 text-sm text-slate-700">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                Site manager
+              </div>
+              <div className="mt-0.5">
+                {form.client_id ? formSm.label : "Select a site to load site manager"}
+              </div>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
+            <input
+              className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
+              placeholder="KA01MM1234"
+              value={form.registration_number}
+              onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
+              required
+            />
+          </label>
+
+          <VehicleInfoFields value={form} onChange={setForm} vehicleTypes={vehicleTypes} />
+
+          {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
+          <div className="flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-slate-300"
+              onClick={() => {
+                setShowAdd(false);
+                setForm(emptyForm());
+                setFormErr("");
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
+              Save vehicle
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="px-4 py-3 border-b bg-slate-50 space-y-2">
-          <div className="text-xs text-slate-600">
-            Rows in <span className="font-semibold text-amber-800">amber</span> await review. Rows in{" "}
-            <span className="font-semibold text-orange-800">orange</span> exceed the site SLA age — remove them
-            manually if needed.
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-slate-700">All vehicles ({rows.length})</div>
+            <div className="text-xs text-slate-600">
+              <span className="font-semibold text-amber-800">Amber</span> = pending review ·{" "}
+              <span className="font-semibold text-orange-800">Orange</span> = over SLA age
+            </div>
           </div>
           <input
             className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -242,7 +283,7 @@ export default function AdminVehicles() {
               <th className="text-left p-3">Type / year</th>
               <th className="text-left p-3">Ownership</th>
               <th className="text-left p-3">Status</th>
-              <th className="text-left p-3">Client</th>
+              <th className="text-left p-3">Site</th>
               <th className="text-left p-3">Owner</th>
               <th className="text-left p-3">Site manager</th>
               <th className="text-left p-3 w-28"> </th>
@@ -336,7 +377,9 @@ export default function AdminVehicles() {
             {!filteredRows.length && (
               <tr>
                 <td colSpan={9} className="p-4 text-slate-500">
-                  {rows.length ? "No vehicles match your search." : "No vehicles yet."}
+                  {rows.length
+                    ? "No vehicles match your search."
+                    : "No vehicles yet. Click Add vehicle to create one."}
                 </td>
               </tr>
             )}
@@ -362,13 +405,7 @@ export default function AdminVehicles() {
               <select
                 className="w-full border rounded-lg px-3 py-2"
                 value={editing.client_id}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    client_id: e.target.value,
-                    site_manager_id: "",
-                  })
-                }
+                onChange={(e) => onSiteChange(e.target.value, setEditing, editing)}
                 required
               >
                 {clients.map((c) => (
@@ -378,19 +415,12 @@ export default function AdminVehicles() {
                 ))}
               </select>
 
-              <select
-                className="w-full border rounded-lg px-3 py-2"
-                value={editing.site_manager_id}
-                onChange={(e) => setEditing({ ...editing, site_manager_id: e.target.value })}
-                disabled={!editing.client_id}
-              >
-                <option value="">Site manager (optional)</option>
-                {managersForEditClient.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.full_name} — {m.email}
-                  </option>
-                ))}
-              </select>
+              <div className="border rounded-lg px-3 py-2 bg-slate-50 text-sm text-slate-700">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                  Site manager
+                </div>
+                <div className="mt-0.5">{editSm.label}</div>
+              </div>
 
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Vehicle number *</span>
