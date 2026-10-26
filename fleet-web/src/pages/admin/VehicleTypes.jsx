@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch } from "../../utils/listFilter";
 
 export default function AdminVehicleTypes() {
   const [rows, setRows] = useState([]);
@@ -7,6 +10,8 @@ export default function AdminVehicleTypes() {
   const [code, setCode] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("");
 
   async function load() {
     const { data } = await api.get("/vehicle-types", { params: { all: 1 } });
@@ -16,6 +21,27 @@ export default function AdminVehicleTypes() {
   useEffect(() => {
     load().catch((e) => setErr(e.response?.data?.error || e.message));
   }, []);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (activeFilter === "active" && !r.is_active) return false;
+      if (activeFilter === "disabled" && r.is_active) return false;
+      return matchSearch(r, search, ["name", "code"]);
+    });
+  }, [rows, search, activeFilter]);
+
+  function exportTypes() {
+    downloadExcel({
+      filename: `vehicle-types-${excelStamp()}.xlsx`,
+      sheetName: "VehicleTypes",
+      rows: filteredRows,
+      columns: [
+        { header: "Name", value: (r) => r.name || "" },
+        { header: "Code", value: (r) => r.code || "" },
+        { header: "Status", value: (r) => (r.is_active ? "Active" : "Disabled") },
+      ],
+    });
+  }
 
   async function create(e) {
     e.preventDefault();
@@ -101,6 +127,29 @@ export default function AdminVehicleTypes() {
       </form>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <ListToolbar
+          title="Vehicle types"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search name or code…"
+          filters={[
+            {
+              key: "active",
+              label: "Status",
+              value: activeFilter,
+              onChange: setActiveFilter,
+              options: [
+                { value: "", label: "All statuses" },
+                { value: "active", label: "Active" },
+                { value: "disabled", label: "Disabled" },
+              ],
+            },
+          ]}
+          onExport={exportTypes}
+          exportDisabled={!filteredRows.length}
+        />
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
@@ -111,7 +160,7 @@ export default function AdminVehicleTypes() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {filteredRows.map((r) => (
               <tr key={r.id} className={`border-t ${r.is_active ? "" : "bg-slate-50 text-slate-500"}`}>
                 <td className="p-3 font-medium">{r.name}</td>
                 <td className="p-3 font-mono text-xs">{r.code || "—"}</td>
@@ -139,10 +188,10 @@ export default function AdminVehicleTypes() {
                 </td>
               </tr>
             ))}
-            {!rows.length && (
+            {!filteredRows.length && (
               <tr>
                 <td colSpan={4} className="p-4 text-slate-500">
-                  No types yet — defaults will appear after first load.
+                  {rows.length ? "No types match your filter." : "No types yet — defaults will appear after first load."}
                 </td>
               </tr>
             )}

@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
 import PasswordInput from "../../components/PasswordInput";
 import { VENDOR_TYPE_OPTIONS } from "../../constants/vehicleFields";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch, uniqueOptions } from "../../utils/listFilter";
 import { formatSiteCodeInput } from "../../utils/vehicleReg";
 
 const emptyForm = () => ({
@@ -86,6 +89,8 @@ export default function AdminClients() {
   const [editing, setEditing] = useState(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [search, setSearch] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
 
   async function load() {
     const [c, am] = await Promise.all([api.get("/clients"), api.get("/account-managers")]);
@@ -96,6 +101,48 @@ export default function AdminClients() {
   useEffect(() => {
     load().catch(console.error);
   }, []);
+
+  const vendorOptions = useMemo(
+    () => uniqueOptions(rows, "vendor_type", { emptyLabel: "All vendor types" }),
+    [rows]
+  );
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (vendorFilter && (r.vendor_type || "") !== vendorFilter) return false;
+      return matchSearch(r, search, [
+        "name",
+        "site_code",
+        "email",
+        "phone",
+        "address",
+        "site_manager_name",
+        "site_manager_email",
+        "account_manager_names",
+        "vendor_type",
+      ]);
+    });
+  }, [rows, search, vendorFilter]);
+
+  function exportSites() {
+    downloadExcel({
+      filename: `sites-${excelStamp()}.xlsx`,
+      sheetName: "Sites",
+      rows: filteredRows,
+      columns: [
+        { header: "Site", value: (r) => r.name || "" },
+        { header: "Code", value: (r) => r.site_code || "" },
+        { header: "Email", value: (r) => r.email || "" },
+        { header: "Phone", value: (r) => r.phone || "" },
+        { header: "Vendor type", value: (r) => r.vendor_type || "" },
+        { header: "SLA max age (yrs)", value: (r) => r.sla_max_age_years ?? "" },
+        { header: "Site manager", value: (r) => r.site_manager_name || "" },
+        { header: "Site manager email", value: (r) => r.site_manager_email || "" },
+        { header: "Account manager", value: (r) => r.account_manager_names || "" },
+        { header: "Address", value: (r) => r.address || "" },
+      ],
+    });
+  }
 
   async function create(e) {
     e.preventDefault();
@@ -347,9 +394,25 @@ export default function AdminClients() {
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b bg-slate-50 text-sm font-semibold text-slate-700">
-          All sites ({rows.length})
-        </div>
+        <ListToolbar
+          title="All sites"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search site, code, manager, account manager…"
+          filters={[
+            {
+              key: "vendor",
+              label: "Vendor type",
+              value: vendorFilter,
+              onChange: setVendorFilter,
+              options: vendorOptions,
+            },
+          ]}
+          onExport={exportSites}
+          exportDisabled={!filteredRows.length}
+        />
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
@@ -362,7 +425,7 @@ export default function AdminClients() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => (
+            {filteredRows.map((c) => (
               <tr key={c.id} className="border-t border-slate-100">
                 <td className="p-3 font-medium">{c.name}</td>
                 <td className="p-3 font-mono">{c.site_code || "—"}</td>
@@ -385,10 +448,16 @@ export default function AdminClients() {
                 </td>
               </tr>
             ))}
-            {!rows.length && (
+            {!filteredRows.length && (
               <tr>
                 <td colSpan={6} className="p-4 text-slate-500">
-                  No sites yet. Click <strong>Add site</strong> to create the first one.
+                  {rows.length
+                    ? "No sites match your filter."
+                    : (
+                      <>
+                        No sites yet. Click <strong>Add site</strong> to create the first one.
+                      </>
+                    )}
                 </td>
               </tr>
             )}

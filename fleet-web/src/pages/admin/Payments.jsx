@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
 
 export default function AdminPayments() {
   const [batches, setBatches] = useState([]);
@@ -55,6 +56,26 @@ export default function AdminPayments() {
       setErr(ex.response?.data?.error || ex.message);
     }
     e.target.value = "";
+  }
+
+  function exportLines() {
+    if (!lines.length) return;
+    downloadExcel({
+      filename: `payment-lines-${batchId || "batch"}-${excelStamp()}.xlsx`,
+      sheetName: "PaymentLines",
+      rows: lines,
+      columns: [
+        { header: "Vehicle", value: (l) => l.vehicle_registration || "" },
+        { header: "Owner", value: (l) => l.owner_name || "" },
+        { header: "Mobile", value: (l) => l.owner_mobile || "" },
+        { header: "Trip count", value: (l) => l.trip_count ?? "" },
+        { header: "Fuel advance (Rs)", value: (l) => l.fuel_advance_rs ?? "" },
+        { header: "Other deductions (Rs)", value: (l) => l.other_deductions_rs ?? "" },
+        { header: "Total paid (Rs)", value: (l) => l.total_paid_rs ?? "" },
+        { header: "WhatsApp sent", value: (l) => (l.whatsapp_sent_at ? "Yes" : "No") },
+        { header: "Public token", value: (l) => l.public_token || "" },
+      ],
+    });
   }
 
   async function loadLines(id) {
@@ -242,7 +263,17 @@ export default function AdminPayments() {
           </ul>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm overflow-hidden">
-          <h2 className="font-semibold text-btt-navy mb-3">Lines {batchId ? `#${batchId}` : ""}</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 className="font-semibold text-btt-navy">Lines {batchId ? `#${batchId}` : ""}</h2>
+            <button
+              type="button"
+              disabled={!lines.length}
+              onClick={exportLines}
+              className="text-xs font-semibold rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+            >
+              Export Excel
+            </button>
+          </div>
           <div className="overflow-x-auto -mx-1">
             <table className="w-full text-xs min-w-[420px]">
               <thead>

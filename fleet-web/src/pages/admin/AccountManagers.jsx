@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
 import PasswordInput from "../../components/PasswordInput";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch } from "../../utils/listFilter";
 import { clientLabel } from "../../utils/vehicleReg";
 
 export default function AdminAccountManagers() {
@@ -17,6 +20,7 @@ export default function AdminAccountManagers() {
   const [pwdModal, setPwdModal] = useState(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [search, setSearch] = useState("");
 
   async function load() {
     const [am, cl] = await Promise.all([api.get("/account-managers"), api.get("/clients")]);
@@ -27,6 +31,34 @@ export default function AdminAccountManagers() {
   useEffect(() => {
     load().catch(console.error);
   }, []);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) =>
+      matchSearch(r, search, [
+        "full_name",
+        "email",
+        "phone",
+        (am) => (am.sites || []).map((s) => s.site_code || s.name).join(" "),
+      ])
+    );
+  }, [rows, search]);
+
+  function exportAccountManagers() {
+    downloadExcel({
+      filename: `account-managers-${excelStamp()}.xlsx`,
+      sheetName: "AccountManagers",
+      rows: filteredRows,
+      columns: [
+        { header: "Name", value: (r) => r.full_name || "" },
+        { header: "Email", value: (r) => r.email || "" },
+        { header: "Phone", value: (r) => r.phone || "" },
+        {
+          header: "Assigned sites",
+          value: (r) => (r.sites || []).map((s) => s.site_code || s.name).join(", "),
+        },
+      ],
+    });
+  }
 
   function toggleIn(list, id) {
     const sid = String(id);
@@ -166,6 +198,16 @@ export default function AdminAccountManagers() {
       </form>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <ListToolbar
+          title="Account managers"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search name, email, site…"
+          onExport={exportAccountManagers}
+          exportDisabled={!filteredRows.length}
+        />
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
@@ -176,7 +218,7 @@ export default function AdminAccountManagers() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((am) => (
+            {filteredRows.map((am) => (
               <tr key={am.id} className="border-t border-slate-100">
                 <td className="p-3 font-medium">{am.full_name}</td>
                 <td className="p-3">{am.email}</td>
@@ -209,10 +251,10 @@ export default function AdminAccountManagers() {
                 </td>
               </tr>
             ))}
-            {!rows.length && (
+            {!filteredRows.length && (
               <tr>
                 <td colSpan={4} className="p-4 text-slate-500">
-                  No account managers yet.
+                  {rows.length ? "No account managers match your search." : "No account managers yet."}
                 </td>
               </tr>
             )}

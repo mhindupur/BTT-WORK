@@ -1,20 +1,82 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch, uniqueOptions } from "../../utils/listFilter";
 
 export default function MyIndents() {
   const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   useEffect(() => {
     api.get("/sm/indents/mine").then((r) => setRows(r.data)).catch(console.error);
   }, []);
 
+  const statusOptions = useMemo(
+    () => uniqueOptions(rows, "status", { emptyLabel: "All statuses" }),
+    [rows]
+  );
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (statusFilter && r.status !== statusFilter) return false;
+      return matchSearch(r, search, [
+        "serial_number",
+        "registration_number",
+        "status",
+        (row) => String(row.amount_rs ?? ""),
+      ]);
+    });
+  }, [rows, search, statusFilter]);
+
+  function exportIndents() {
+    downloadExcel({
+      filename: `my-indents-${excelStamp()}.xlsx`,
+      sheetName: "MyIndents",
+      rows: filteredRows,
+      columns: [
+        { header: "Serial", value: (r) => r.serial_number || "" },
+        { header: "Vehicle", value: (r) => r.registration_number || "" },
+        { header: "Amount (Rs)", value: (r) => r.amount_rs ?? "" },
+        { header: "Status", value: (r) => r.status || "" },
+        {
+          header: "Created",
+          value: (r) => (r.created_at ? new Date(r.created_at).toLocaleString() : ""),
+        },
+      ],
+    });
+  }
+
   return (
     <div className="w-full max-w-4xl mx-auto">
       <h1 className="text-xl sm:text-2xl font-bold text-btt-navy mb-3 sm:mb-4">My indents</h1>
 
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-3">
+        <ListToolbar
+          title="Indents"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search serial, vehicle…"
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              value: statusFilter,
+              onChange: setStatusFilter,
+              options: statusOptions,
+            },
+          ]}
+          onExport={exportIndents}
+          exportDisabled={!filteredRows.length}
+        />
+      </div>
+
       {/* Mobile: cards */}
       <ul className="sm:hidden space-y-3">
-        {rows.map((i) => (
+        {filteredRows.map((i) => (
           <li
             key={i.id}
             className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-2 text-sm"
@@ -35,8 +97,10 @@ export default function MyIndents() {
             </div>
           </li>
         ))}
-        {rows.length === 0 && (
-          <li className="text-slate-500 text-sm text-center py-8">No indents yet.</li>
+        {filteredRows.length === 0 && (
+          <li className="text-slate-500 text-sm text-center py-8">
+            {rows.length ? "No indents match your filter." : "No indents yet."}
+          </li>
         )}
       </ul>
 
@@ -53,7 +117,7 @@ export default function MyIndents() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((i) => (
+            {filteredRows.map((i) => (
               <tr key={i.id} className="border-t border-slate-100">
                 <td className="p-3 font-mono text-xs">{i.serial_number}</td>
                 <td className="p-3">{i.registration_number}</td>
@@ -62,6 +126,13 @@ export default function MyIndents() {
                 <td className="p-3 text-slate-500 whitespace-nowrap">{new Date(i.created_at).toLocaleString()}</td>
               </tr>
             ))}
+            {!filteredRows.length && (
+              <tr>
+                <td colSpan={5} className="p-4 text-slate-500">
+                  {rows.length ? "No indents match your filter." : "No indents yet."}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

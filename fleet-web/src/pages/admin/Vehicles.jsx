@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
 import VehicleInfoFields from "../../components/VehicleInfoFields";
+import { APPROVAL_STATUS_LABEL } from "../../constants/vehicleDocs";
 import {
   detailsFromVehicleRow,
   detailsPayload,
   emptyVehicleDetails,
   ownershipLabel,
 } from "../../constants/vehicleFields";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch, uniqueOptions } from "../../utils/listFilter";
 import { clientLabel, formatRegInput, isSlaExceeded, normalizeVehicleRegistration } from "../../utils/vehicleReg";
 
 const emptyForm = () => ({
@@ -36,6 +40,8 @@ export default function AdminVehicles() {
   const [editErr, setEditErr] = useState("");
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [siteFilter, setSiteFilter] = useState("");
 
   async function load() {
     const [v, c, vt] = await Promise.all([
@@ -58,31 +64,66 @@ export default function AdminVehicles() {
     [clients, editing?.client_id]
   );
 
+  const siteOptions = useMemo(
+    () =>
+      uniqueOptions(rows, (r) => (r.site_code ? `${r.client_name} (${r.site_code})` : r.client_name), {
+        emptyLabel: "All sites",
+      }),
+    [rows]
+  );
+
   const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
     return rows.filter((r) => {
-      const hay = [
-        r.registration_number,
-        r.vehicle_serial,
-        r.client_name,
-        r.site_code,
-        r.owner_name,
-        r.owner_phone,
-        r.ownership,
-        r.engine_number,
-        r.chassis_number,
-        r.site_manager_names,
-        r.vehicle_type_name,
-        r.make_model,
-        r.approval_status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
+      if (statusFilter && r.approval_status !== statusFilter) return false;
+      if (siteFilter) {
+        const label = r.site_code ? `${r.client_name} (${r.site_code})` : r.client_name;
+        if (label !== siteFilter) return false;
+      }
+      return matchSearch(r, search, [
+        "registration_number",
+        "vehicle_serial",
+        "client_name",
+        "site_code",
+        "owner_name",
+        "owner_phone",
+        "ownership",
+        "engine_number",
+        "chassis_number",
+        "site_manager_names",
+        "vehicle_type_name",
+        "make_model",
+        "approval_status",
+      ]);
     });
-  }, [rows, search]);
+  }, [rows, search, statusFilter, siteFilter]);
+
+  function exportVehicles() {
+    downloadExcel({
+      filename: `vehicles-${excelStamp()}.xlsx`,
+      sheetName: "Vehicles",
+      rows: filteredRows,
+      columns: [
+        { header: "Registration", value: (r) => r.registration_number },
+        { header: "Serial", value: (r) => r.vehicle_serial || "" },
+        { header: "Type", value: (r) => r.vehicle_type_name || r.make_model || "" },
+        { header: "Year", value: (r) => r.manufacture_year || "" },
+        { header: "Ownership", value: (r) => ownershipLabel(r.ownership) },
+        {
+          header: "Status",
+          value: (r) => APPROVAL_STATUS_LABEL[r.approval_status] || r.approval_status || "",
+        },
+        { header: "Site", value: (r) => r.client_name || "" },
+        { header: "Site code", value: (r) => r.site_code || "" },
+        { header: "Owner", value: (r) => r.owner_name || "" },
+        { header: "Owner phone", value: (r) => r.owner_phone || "" },
+        { header: "Site manager", value: (r) => r.site_manager_names || "" },
+        { header: "Engine", value: (r) => r.engine_number || "" },
+        { header: "Chassis", value: (r) => r.chassis_number || "" },
+        { header: "Fuel", value: (r) => r.fuel_type || "" },
+        { header: "Seating", value: (r) => r.seating_capacity || "" },
+      ],
+    });
+  }
 
   function onSiteChange(clientId, setState, current) {
     const sm = smForSite(clients, clientId);
@@ -260,20 +301,41 @@ export default function AdminVehicles() {
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="px-4 py-3 border-b bg-slate-50 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-semibold text-slate-700">All vehicles ({rows.length})</div>
-            <div className="text-xs text-slate-600">
-              <span className="font-semibold text-amber-800">Amber</span> = pending review ·{" "}
-              <span className="font-semibold text-orange-800">Orange</span> = over SLA age
-            </div>
-          </div>
-          <input
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Search registration, serial, owner, chassis, type…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <ListToolbar
+          title="All vehicles"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search registration, serial, owner, chassis, type…"
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              value: statusFilter,
+              onChange: setStatusFilter,
+              options: [
+                { value: "", label: "All statuses" },
+                { value: "approved", label: "Approved" },
+                { value: "pending_review", label: "Pending review" },
+                { value: "draft", label: "Draft" },
+                { value: "rejected", label: "Rejected" },
+              ],
+            },
+            {
+              key: "site",
+              label: "Site",
+              value: siteFilter,
+              onChange: setSiteFilter,
+              options: siteOptions,
+            },
+          ]}
+          onExport={exportVehicles}
+          exportDisabled={!filteredRows.length}
+        />
+        <div className="px-4 py-2 border-b bg-white text-xs text-slate-600">
+          <span className="font-semibold text-amber-800">Amber</span> = pending review ·{" "}
+          <span className="font-semibold text-orange-800">Orange</span> = over SLA age
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-50">

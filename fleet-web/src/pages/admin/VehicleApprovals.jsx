@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
 import { DOC_STATUS_LABEL, VEHICLE_DOC_SECTIONS } from "../../constants/vehicleDocs";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch } from "../../utils/listFilter";
 
 function dateStr(v) {
   if (!v) return "—";
@@ -42,16 +45,38 @@ export default function AdminVehicleApprovals() {
   const selected = rows.find((r) => Number(r.id) === Number(selectedId));
 
   const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
-      const hay = [r.registration_number, r.client_name, r.submitted_by_name, r.make_model, r.owner_name]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
+    return rows.filter((r) =>
+      matchSearch(r, search, [
+        "registration_number",
+        "client_name",
+        "submitted_by_name",
+        "make_model",
+        "owner_name",
+        "site_code",
+      ])
+    );
   }, [rows, search]);
+
+  function exportPending() {
+    downloadExcel({
+      filename: `vehicle-approvals-${excelStamp()}.xlsx`,
+      sheetName: "PendingReview",
+      rows: filteredRows,
+      columns: [
+        { header: "Registration", value: (r) => r.registration_number || "" },
+        { header: "Site", value: (r) => r.client_name || "" },
+        { header: "Submitted by", value: (r) => r.submitted_by_name || "" },
+        { header: "Owner", value: (r) => r.owner_name || "" },
+        { header: "Type", value: (r) => r.make_model || r.vehicle_type_name || "" },
+        { header: "Documents", value: (r) => r.doc_count ?? "" },
+        { header: "Pending docs", value: (r) => r.pending_doc_count ?? "" },
+        {
+          header: "Submitted at",
+          value: (r) => (r.submitted_at ? String(r.submitted_at).replace("T", " ").slice(0, 16) : ""),
+        },
+      ],
+    });
+  }
 
   const docsByType = useMemo(() => {
     const map = {};
@@ -152,15 +177,16 @@ export default function AdminVehicleApprovals() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b space-y-2">
-          <div className="font-bold text-btt-navy">Waiting for your review</div>
-          <input
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Search registration, client, site manager…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <ListToolbar
+          title="Waiting for your review"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search registration, client, site manager…"
+          onExport={exportPending}
+          exportDisabled={!filteredRows.length}
+        />
         <ul className="divide-y">
           {filteredRows.map((r) => (
             <li key={r.id} className={`p-4 ${Number(selectedId) === Number(r.id) ? "bg-amber-50/50" : ""}`}>

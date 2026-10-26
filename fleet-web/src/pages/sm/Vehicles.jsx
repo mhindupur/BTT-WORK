@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
 import DocUploadCard from "../../components/DocUploadCard";
+import ListToolbar from "../../components/ListToolbar";
 import VehicleInfoFields from "../../components/VehicleInfoFields";
 import {
   detailsPayload,
   emptyVehicleDetails,
 } from "../../constants/vehicleFields";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
 import { formatRegInput, isSlaExceeded, normalizeVehicleRegistration } from "../../utils/vehicleReg";
 import {
   APPROVAL_STATUS_LABEL,
@@ -148,6 +150,23 @@ export default function SmVehicles() {
       ),
     [rows, q]
   );
+
+  function exportApproved() {
+    downloadExcel({
+      filename: `my-approved-vehicles-${excelStamp()}.xlsx`,
+      sheetName: "ApprovedVehicles",
+      rows: approvedRows,
+      columns: [
+        { header: "Registration", value: (r) => r.registration_number || "" },
+        { header: "Serial", value: (r) => r.vehicle_serial || "" },
+        { header: "Type", value: (r) => r.vehicle_type_name || r.make_model || "" },
+        { header: "Owner", value: (r) => r.owner_name || "" },
+        { header: "Owner phone", value: (r) => r.owner_phone || "" },
+        { header: "Status", value: (r) => APPROVAL_STATUS_LABEL[r.approval_status] || r.approval_status },
+        { header: "Documents", value: (r) => r.doc_count ?? 0 },
+      ],
+    });
+  }
 
   const uploadedPrimary = PRIMARY_DOC_SECTIONS.filter((s) => docsByType[s.type]).length;
   const currentSection = activeSections[Math.min(docStep, Math.max(activeSections.length - 1, 0))];
@@ -533,17 +552,16 @@ export default function SmVehicles() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="p-3 border-b bg-slate-50 space-y-2">
-          <div className="font-bold text-btt-navy">
-            Approved vehicles ({rows.filter((r) => r.approval_status === "approved").length})
-          </div>
-          <input
-            className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white"
-            placeholder="Search registration, serial, owner, type…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <ListToolbar
+          title="Approved vehicles"
+          count={approvedRows.length}
+          totalCount={rows.filter((r) => r.approval_status === "approved").length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search registration, serial, owner, type…"
+          onExport={exportApproved}
+          exportDisabled={!approvedRows.length}
+        />
         <ul className="divide-y">
           {approvedRows.map(renderVehicleRow)}
           {!approvedRows.length && (

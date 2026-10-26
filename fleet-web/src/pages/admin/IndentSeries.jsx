@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import ListToolbar from "../../components/ListToolbar";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch, uniqueOptions } from "../../utils/listFilter";
 
 export default function IndentSeries() {
   const [managers, setManagers] = useState([]);
@@ -15,6 +18,8 @@ export default function IndentSeries() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loadErr, setLoadErr] = useState("");
+  const [search, setSearch] = useState("");
+  const [smFilter, setSmFilter] = useState("");
 
   async function load() {
     setLoadErr("");
@@ -33,6 +38,47 @@ export default function IndentSeries() {
       setLoadErr(`${d?.error || d?.message || ex.message || "Could not load page data."}${hint}`);
     });
   }, []);
+
+  const smOptions = useMemo(
+    () => uniqueOptions(batches, "site_manager_name", { emptyLabel: "All site managers" }),
+    [batches]
+  );
+
+  const filteredBatches = useMemo(() => {
+    return batches.filter((b) => {
+      if (smFilter && b.site_manager_name !== smFilter) return false;
+      return matchSearch(b, search, [
+        "site_manager_name",
+        "prefix",
+        "description",
+        (row) => String(row.id ?? ""),
+        (row) => `${row.prefix}${row.start_number}-${row.end_number}`,
+      ]);
+    });
+  }, [batches, search, smFilter]);
+
+  function exportBatches() {
+    downloadExcel({
+      filename: `indent-series-${excelStamp()}.xlsx`,
+      sheetName: "IndentSeries",
+      rows: filteredBatches,
+      columns: [
+        { header: "Batch ID", value: (b) => b.id },
+        { header: "Site manager", value: (b) => b.site_manager_name || "" },
+        { header: "Prefix", value: (b) => b.prefix || "" },
+        { header: "Start", value: (b) => b.start_number },
+        { header: "End", value: (b) => b.end_number },
+        { header: "Digit width", value: (b) => b.digit_width },
+        { header: "Available", value: (b) => b.available_count },
+        { header: "Used", value: (b) => b.consumed_count },
+        { header: "Note", value: (b) => b.description || "" },
+        {
+          header: "Created",
+          value: (b) => (b.created_at ? new Date(b.created_at).toLocaleString() : ""),
+        },
+      ],
+    });
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -161,7 +207,25 @@ export default function IndentSeries() {
       </form>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <h2 className="font-semibold text-btt-navy p-4 border-b border-slate-100">Issued batches</h2>
+        <ListToolbar
+          title="Issued batches"
+          count={filteredBatches.length}
+          totalCount={batches.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search batch, site manager, prefix…"
+          filters={[
+            {
+              key: "sm",
+              label: "Site manager",
+              value: smFilter,
+              onChange: setSmFilter,
+              options: smOptions,
+            },
+          ]}
+          onExport={exportBatches}
+          exportDisabled={!filteredBatches.length}
+        />
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-600">
             <tr>
@@ -173,7 +237,7 @@ export default function IndentSeries() {
             </tr>
           </thead>
           <tbody>
-            {batches.map((b) => (
+            {filteredBatches.map((b) => (
               <tr key={b.id} className="border-t border-slate-100">
                 <td className="p-3">{b.id}</td>
                 <td className="p-3">{b.site_manager_name}</td>
