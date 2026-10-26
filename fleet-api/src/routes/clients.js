@@ -6,9 +6,16 @@ import { normalizeSiteCode } from "../utils/vehicleReg.js";
 const r = Router();
 r.use(requireAuth, requireAdmin);
 
-const CLIENT_COLS = `id, name, site_code, email, phone, address, latitude, longitude,
-  start_date, vendor_type, sla_max_age_years, created_at,
-  TIMESTAMPDIFF(YEAR, start_date, CURDATE()) AS site_age_years`;
+const CLIENT_COLS = `c.id, c.name, c.site_code, c.email, c.phone, c.address, c.latitude, c.longitude,
+  c.start_date, c.vendor_type, c.sla_max_age_years, c.created_at,
+  TIMESTAMPDIFF(YEAR, c.start_date, CURDATE()) AS site_age_years,
+  (SELECT GROUP_CONCAT(u.full_name ORDER BY u.full_name SEPARATOR ', ')
+     FROM client_account_managers cam
+     JOIN users u ON u.id = cam.user_id
+    WHERE cam.client_id = c.id) AS account_manager_names,
+  (SELECT GROUP_CONCAT(cam.user_id ORDER BY cam.user_id)
+     FROM client_account_managers cam
+    WHERE cam.client_id = c.id) AS account_manager_user_ids`;
 
 function pickClientFields(body, existing = {}) {
   const out = {
@@ -58,18 +65,68 @@ function pickClientFields(body, existing = {}) {
   return out;
 }
 
+function parseAmUserIds(body) {
+  if (Array.isArray(body.account_manager_user_ids)) {
+    return body.account_manager_user_ids.map(Number).filter(Boolean);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "account_manager_user_id")) {
+    const v = body.account_manager_user_id;
+    if (v === "" || v == null) return [];
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? [n] : [];
+  }
+  return null; // not provided
+}
+
+async function assertAccountManagers(ids) {
+  for (const uid of ids) {
+    const u = await queryOne(
+      "SELECT id FROM users WHERE id = ? AND role = 'account_manager' AND is_active = 1",
+      [uid]
+    );
+    if (!u) return { error: `Invalid account manager user_id ${uid}`, status: 400 };
+  }
+  return null;
+}
+
+async function syncAccountManagers(clientId, userIds) {
+  await execute("DELETE FROM client_account_managers WHERE client_id = ?", [clientId]);
+  for (const uid of userIds) {
+    await execute("INSERT INTO client_account_managers (client_id, user_id) VALUES (?,?)", [
+      clientId,
+      uid,
+    ]);
+  }
+}
+
+function enrichClientRow(row) {
+  if (!row) return row;
+  const ids = String(row.account_manager_user_ids || "")
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter(Boolean);
+  return { ...row, account_manager_user_ids: ids };
+}
+
 r.get("/", async (_req, res) => {
-  res.json(await query(`SELECT ${CLIENT_COLS} FROM clients ORDER BY id DESC`));
+  const rows = await query(`SELECT ${CLIENT_COLS} FROM clients c ORDER BY c.id DESC`);
+  res.json(rows.map(enrichClientRow));
 });
 
 r.post("/", async (req, res) => {
-  const f = pickClientFields(req.body || {});
+  const body = req.body || {};
+  const f = pickClientFields(body);
   if (!f.name) return res.status(400).json({ error: "name required" });
   if (!f.site_code) {
     return res.status(400).json({ error: "site_code required — exactly 5 letters/digits, e.g. INFNG" });
   }
   const clash = await queryOne("SELECT id FROM clients WHERE site_code = ?", [f.site_code]);
   if (clash) return res.status(409).json({ error: "Site code already in use" });
+
+  const amIds = parseAmUserIds(body) || [];
+  const amErr = await assertAccountManagers(amIds);
+  if (amErr) return res.status(amErr.status).json({ error: amErr.error });
+
   const result = await execute(
     `INSERT INTO clients (name, site_code, email, phone, address, latitude, longitude, start_date, vendor_type, sla_max_age_years)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -86,13 +143,17 @@ r.post("/", async (req, res) => {
       f.sla_max_age_years,
     ]
   );
-  res.status(201).json(await queryOne(`SELECT ${CLIENT_COLS} FROM clients WHERE id = ?`, [result.insertId]));
+  if (amIds.length) await syncAccountManagers(result.insertId, amIds);
+  res.status(201).json(
+    enrichClientRow(await queryOne(`SELECT ${CLIENT_COLS} FROM clients c WHERE c.id = ?`, [result.insertId]))
+  );
 });
 
 r.patch("/:id", async (req, res) => {
   const existing = await queryOne("SELECT * FROM clients WHERE id = ?", [req.params.id]);
   if (!existing) return res.status(404).json({ error: "Not found" });
-  const f = pickClientFields(req.body || {}, existing);
+  const body = req.body || {};
+  const f = pickClientFields(body, existing);
   if (!f.name) return res.status(400).json({ error: "name required" });
   if (!f.site_code) {
     return res.status(400).json({ error: "site_code required — exactly 5 letters/digits, e.g. INFNG" });
@@ -102,6 +163,13 @@ r.patch("/:id", async (req, res) => {
     existing.id,
   ]);
   if (clash) return res.status(409).json({ error: "Site code already in use" });
+
+  const amIds = parseAmUserIds(body);
+  if (amIds) {
+    const amErr = await assertAccountManagers(amIds);
+    if (amErr) return res.status(amErr.status).json({ error: amErr.error });
+  }
+
   await execute(
     `UPDATE clients SET name=?, site_code=?, email=?, phone=?, address=?, latitude=?, longitude=?,
       start_date=?, vendor_type=?, sla_max_age_years=? WHERE id=?`,
@@ -119,7 +187,10 @@ r.patch("/:id", async (req, res) => {
       existing.id,
     ]
   );
-  res.json(await queryOne(`SELECT ${CLIENT_COLS} FROM clients WHERE id = ?`, [existing.id]));
+  if (amIds) await syncAccountManagers(existing.id, amIds);
+  res.json(
+    enrichClientRow(await queryOne(`SELECT ${CLIENT_COLS} FROM clients c WHERE c.id = ?`, [existing.id]))
+  );
 });
 
 r.delete("/:id", async (req, res) => {

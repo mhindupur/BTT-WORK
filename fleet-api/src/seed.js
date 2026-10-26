@@ -38,6 +38,34 @@ async function main() {
   }
   console.log("[seed] Demo client id:", client.id);
 
+  const amEmail = (process.env.DEMO_AM_EMAIL || "account@btt.fleet").trim().toLowerCase();
+  const amPass = process.env.DEMO_AM_PASSWORD || "Account@123";
+  try {
+    const amUserId = await ensureUser(
+      amEmail,
+      amPass,
+      "account_manager",
+      "Demo Account Manager",
+      "+919999000003"
+    );
+    const amLink = await queryOne(
+      "SELECT 1 AS ok FROM client_account_managers WHERE client_id = ? AND user_id = ?",
+      [client.id, amUserId]
+    );
+    if (!amLink) {
+      await execute("INSERT INTO client_account_managers (client_id, user_id) VALUES (?,?)", [
+        client.id,
+        amUserId,
+      ]);
+    }
+    console.log("[seed] Account manager login:", amEmail, "/", amPass);
+  } catch (err) {
+    console.warn(
+      "[seed] Skipped account manager (apply fleet-db/migration_009_account_managers.sql if role/table missing):",
+      err.message
+    );
+  }
+
   const smUserId = await ensureUser(
     smEmail,
     smPass,

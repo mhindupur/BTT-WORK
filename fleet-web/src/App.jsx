@@ -4,9 +4,11 @@ import Login from "./pages/Login";
 import PublicPayment from "./pages/PublicPayment";
 import AdminLayout from "./layouts/AdminLayout";
 import SmLayout from "./layouts/SmLayout";
+import AmLayout from "./layouts/AmLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminClients from "./pages/admin/Clients";
 import AdminSiteManagers from "./pages/admin/SiteManagers";
+import AdminAccountManagers from "./pages/admin/AccountManagers";
 import AdminVehicles from "./pages/admin/Vehicles";
 import AdminIndents from "./pages/admin/Indents";
 import AdminIndentSeries from "./pages/admin/IndentSeries";
@@ -18,6 +20,8 @@ import SmDashboard from "./pages/sm/SmDashboard";
 import IssueIndent from "./pages/sm/IssueIndent";
 import MyIndents from "./pages/sm/MyIndents";
 import SmVehicles from "./pages/sm/Vehicles";
+import AmDashboard from "./pages/am/AmDashboard";
+import AmSites from "./pages/am/AmSites";
 
 function Guard({ role, children }) {
   const { user, ready } = useAuth();
@@ -43,6 +47,7 @@ export default function App() {
         <Route index element={<AdminDashboard />} />
         <Route path="clients" element={<AdminClients />} />
         <Route path="site-managers" element={<AdminSiteManagers />} />
+        <Route path="account-managers" element={<AdminAccountManagers />} />
         <Route path="vehicles" element={<AdminVehicles />} />
         <Route path="vehicle-types" element={<AdminVehicleTypes />} />
         <Route path="vehicle-approvals" element={<AdminVehicleApprovals />} />
@@ -63,6 +68,17 @@ export default function App() {
         <Route path="vehicles" element={<SmVehicles />} />
         <Route path="issue-indent" element={<IssueIndent />} />
         <Route path="my-indents" element={<MyIndents />} />
+      </Route>
+      <Route
+        path="/am"
+        element={
+          <Guard role="account_manager">
+            <AmLayout />
+          </Guard>
+        }
+      >
+        <Route index element={<AmDashboard />} />
+        <Route path="sites" element={<AmSites />} />
       </Route>
       <Route path="/" element={<Navigate to="/login" replace />} />
     </Routes>

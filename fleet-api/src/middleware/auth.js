@@ -27,3 +27,10 @@ export function requireSiteManager(req, res, next) {
   }
   next();
 }
+
+export function requireAccountManager(req, res, next) {
+  if (req.user?.role !== "account_manager") {
+    return res.status(403).json({ error: "Account manager only" });
+  }
+  next();
+}

@@ -28,6 +28,7 @@ export default function Login() {
     try {
       const u = await login(email, password);
       if (u.role === "admin") nav("/admin");
+      else if (u.role === "account_manager") nav("/am");
       else nav("/sm");
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message || "Login failed");
@@ -71,7 +72,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-slate-200 p-8">
         <h1 className="text-2xl font-bold text-btt-navy">BTT Fleet &amp; Fuel</h1>
-        <p className="text-slate-600 text-sm mt-1">Admin or Site Manager sign-in</p>
+        <p className="text-slate-600 text-sm mt-1">Admin, Account Manager, or Site Manager sign-in</p>
         {mode === "login" ? (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
@@ -261,6 +262,11 @@ export default function Login() {
             <span className="font-medium text-slate-600">Supervisor / Site manager</span> —{" "}
             <code className="text-slate-800">supervisor@btt.fleet</code> /{" "}
             <code className="text-slate-800">Supervisor@123</code>
+          </div>
+          <div>
+            <span className="font-medium text-slate-600">Account manager</span> —{" "}
+            <code className="text-slate-800">account@btt.fleet</code> /{" "}
+            <code className="text-slate-800">Account@123</code>
           </div>
           <p className="text-slate-400 pt-1">Run <code className="text-slate-600">npm run seed</code> in{" "}
             <code className="text-slate-600">fleet-api</code> after applying SQL.</p>

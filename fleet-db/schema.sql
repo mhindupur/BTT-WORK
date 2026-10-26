@@ -46,7 +46,7 @@ CREATE TABLE users (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   email VARCHAR(255) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'site_manager') NOT NULL,
+  role ENUM('admin', 'site_manager', 'account_manager') NOT NULL,
   full_name VARCHAR(255) NOT NULL,
   phone VARCHAR(64) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -67,6 +67,17 @@ CREATE TABLE site_managers (
   KEY ix_sm_client (client_id),
   CONSTRAINT fk_sm_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
   CONSTRAINT fk_sm_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Account managers: one user can be assigned many sites (view-only in app)
+CREATE TABLE client_account_managers (
+  client_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (client_id, user_id),
+  KEY ix_cam_user (user_id),
+  CONSTRAINT fk_cam_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE,
+  CONSTRAINT fk_cam_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE vehicle_types (

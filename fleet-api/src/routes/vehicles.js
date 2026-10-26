@@ -237,12 +237,22 @@ admin.use(requireAuth, requireAdmin);
 
 admin.get("/", async (req, res) => {
   const status = String(req.query.approval_status || "").trim();
+  const clientId =
+    req.query.client_id != null && String(req.query.client_id).trim() !== ""
+      ? Number(req.query.client_id)
+      : null;
   let sql = `${VEHICLE_ADMIN_ROW}`;
   const params = [];
+  const where = [];
   if (status) {
-    sql += ` WHERE v.approval_status = ?`;
+    where.push(`v.approval_status = ?`);
     params.push(status);
   }
+  if (clientId) {
+    where.push(`v.client_id = ?`);
+    params.push(clientId);
+  }
+  if (where.length) sql += ` WHERE ${where.join(" AND ")}`;
   sql += ` ORDER BY v.id DESC`;
   res.json(await query(sql, params));
 });

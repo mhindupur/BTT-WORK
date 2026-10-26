@@ -7,6 +7,7 @@ import fs from "fs";
 import auth from "./routes/auth.js";
 import clients from "./routes/clients.js";
 import siteManagers from "./routes/siteManagers.js";
+import accountManagers from "./routes/accountManagers.js";
 import { vehiclesAdmin, vehiclesSm } from "./routes/vehicles.js";
 import { indentsAdmin, indentsSm } from "./routes/indents.js";
 import fuel from "./routes/fuel.js";
@@ -16,6 +17,7 @@ import indentBatches from "./routes/indentBatches.js";
 import notifications from "./routes/notifications.js";
 import vehicleTypes from "./routes/vehicleTypes.js";
 import smDashboard from "./routes/smDashboard.js";
+import amSites from "./routes/amSites.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -39,8 +41,10 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok", app: "btt-fleet-a
 app.use("/api/auth", auth);
 app.use("/api/clients", clients);
 app.use("/api/site-managers", siteManagers);
+app.use("/api/account-managers", accountManagers);
 app.use("/api/admin/vehicles", vehiclesAdmin);
 app.use("/api/sm/vehicles", vehiclesSm);
+app.use("/api/am", amSites);
 app.use("/api/admin/indents", indentsAdmin);
 app.use("/api/admin/indent-batches", indentBatches);
 app.use("/api/sm/indents", indentsSm);

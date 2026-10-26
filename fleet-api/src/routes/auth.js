@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { queryOne, execute } from "../db.js";
+import { query, queryOne, execute } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { normalizeWhatsAppDigits, sendAuthOtpWhatsApp } from "../services/whatsapp.js";
 
@@ -23,6 +23,7 @@ r.post("/login", async (req, res) => {
   });
   let clientId = null;
   let siteManagerId = null;
+  let assignedClientIds = [];
   if (user.role === "site_manager") {
     const sm = await queryOne(
       "SELECT id, client_id FROM site_managers WHERE user_id = ?",
@@ -32,6 +33,12 @@ r.post("/login", async (req, res) => {
       siteManagerId = sm.id;
       clientId = sm.client_id;
     }
+  } else if (user.role === "account_manager") {
+    const rows = await query(
+      "SELECT client_id FROM client_account_managers WHERE user_id = ? ORDER BY client_id",
+      [user.id]
+    );
+    assignedClientIds = rows.map((r) => Number(r.client_id));
   }
   res.json({
     access_token: token,
@@ -44,6 +51,7 @@ r.post("/login", async (req, res) => {
       phone: user.phone,
       client_id: clientId,
       site_manager_id: siteManagerId,
+      assigned_client_ids: assignedClientIds,
     },
   });
 });
@@ -56,6 +64,7 @@ r.get("/me", requireAuth, async (req, res) => {
   if (!user) return res.status(404).json({ error: "Not found" });
   let clientId = null;
   let siteManagerId = null;
+  let assignedClientIds = [];
   if (user.role === "site_manager") {
     const sm = await queryOne("SELECT id, client_id FROM site_managers WHERE user_id = ?", [
       user.id,
@@ -64,8 +73,19 @@ r.get("/me", requireAuth, async (req, res) => {
       siteManagerId = sm.id;
       clientId = sm.client_id;
     }
+  } else if (user.role === "account_manager") {
+    const rows = await query(
+      "SELECT client_id FROM client_account_managers WHERE user_id = ? ORDER BY client_id",
+      [user.id]
+    );
+    assignedClientIds = rows.map((r) => Number(r.client_id));
   }
-  res.json({ ...user, client_id: clientId, site_manager_id: siteManagerId });
+  res.json({
+    ...user,
+    client_id: clientId,
+    site_manager_id: siteManagerId,
+    assigned_client_ids: assignedClientIds,
+  });
 });
 
 /**
