@@ -18,6 +18,12 @@ function Labeled({ label, children }) {
   );
 }
 
+function typeLabel(t) {
+  const pax = t.passenger_count != null && t.passenger_count !== "" ? Number(t.passenger_count) : null;
+  if (pax != null && Number.isFinite(pax)) return `${t.name} (${pax} pax)`;
+  return t.name;
+}
+
 /**
  * Fleetbook-style vehicle information fields (ownership, chassis, GPS, expiries…).
  * `value` / `onChange` work like a controlled form slice.
@@ -26,6 +32,7 @@ export default function VehicleInfoFields({
   value,
   onChange,
   vehicleTypes = [],
+  gpsVendors = [],
   showVehicleType = true,
   showStatus = true,
   showExpirySection = true,
@@ -33,6 +40,41 @@ export default function VehicleInfoFields({
 }) {
   const set = (patch) => onChange({ ...value, ...patch });
   const grid = dense ? "grid sm:grid-cols-2 gap-3" : "grid md:grid-cols-3 gap-3";
+  const gpsOn = value.gps_installed === true || value.gps_installed === 1 || value.gps_installed === "1";
+
+  function onVehicleTypeChange(rawId) {
+    const patch = { vehicle_type_id: rawId };
+    if (rawId) {
+      const t = vehicleTypes.find((x) => String(x.id) === String(rawId));
+      const pax = t?.passenger_count != null ? Number(t.passenger_count) : null;
+      if (pax != null && Number.isFinite(pax) && pax >= 1) {
+        patch.seating_capacity = String(pax);
+      }
+    }
+    set(patch);
+  }
+
+  function onGpsChange(raw) {
+    const patch = { gps_installed: raw };
+    if (raw !== "1") {
+      patch.gps_imei = "";
+      patch.gps_vendor = "";
+      patch.gps_vendor_id = "";
+    }
+    set(patch);
+  }
+
+  function onGpsVendorChange(rawId) {
+    if (!rawId) {
+      set({ gps_vendor_id: "", gps_vendor: "" });
+      return;
+    }
+    const v = gpsVendors.find((x) => String(x.id) === String(rawId));
+    set({
+      gps_vendor_id: rawId,
+      gps_vendor: v?.name || "",
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -58,12 +100,12 @@ export default function VehicleInfoFields({
               <select
                 className={inputCls}
                 value={value.vehicle_type_id || ""}
-                onChange={(e) => set({ vehicle_type_id: e.target.value })}
+                onChange={(e) => onVehicleTypeChange(e.target.value)}
               >
                 <option value="">Select type</option>
                 {vehicleTypes.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name}
+                    {typeLabel(t)}
                   </option>
                 ))}
               </select>
@@ -94,7 +136,7 @@ export default function VehicleInfoFields({
               ))}
             </select>
           </Labeled>
-          <Labeled label="Seating capacity">
+          <Labeled label="No. of passengers">
             <select
               className={inputCls}
               value={value.seating_capacity || ""}
@@ -103,12 +145,12 @@ export default function VehicleInfoFields({
               <option value="">Select</option>
               {SEATING_OPTIONS.map((n) => (
                 <option key={n} value={n}>
-                  {n} seater{n === 1 ? "" : "s"}
+                  {n}
                 </option>
               ))}
             </select>
           </Labeled>
-          <Labeled label="Date of registration">
+          <Labeled label="Induction date">
             <input
               className={inputCls}
               type="date"
@@ -202,11 +244,7 @@ export default function VehicleInfoFields({
             />
           </Labeled>
           <Labeled label="GPS">
-            <select
-              className={inputCls}
-              value={value.gps_installed === true || value.gps_installed === 1 || value.gps_installed === "1" ? "1" : "0"}
-              onChange={(e) => set({ gps_installed: e.target.value })}
-            >
+            <select className={inputCls} value={gpsOn ? "1" : "0"} onChange={(e) => onGpsChange(e.target.value)}>
               {GPS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -219,16 +257,23 @@ export default function VehicleInfoFields({
               className={`${inputCls} font-mono`}
               value={value.gps_imei || ""}
               onChange={(e) => set({ gps_imei: e.target.value })}
-              disabled={!(value.gps_installed === true || value.gps_installed === 1 || value.gps_installed === "1")}
+              disabled={!gpsOn}
             />
           </Labeled>
-          <Labeled label="GPS vendor">
-            <input
+          <Labeled label="GPS type / vendor">
+            <select
               className={inputCls}
-              value={value.gps_vendor || ""}
-              onChange={(e) => set({ gps_vendor: e.target.value })}
-              disabled={!(value.gps_installed === true || value.gps_installed === 1 || value.gps_installed === "1")}
-            />
+              value={value.gps_vendor_id || ""}
+              onChange={(e) => onGpsVendorChange(e.target.value)}
+              disabled={!gpsOn}
+            >
+              <option value="">Select GPS type</option>
+              {gpsVendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
           </Labeled>
         </div>
       </div>

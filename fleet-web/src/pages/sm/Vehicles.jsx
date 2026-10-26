@@ -74,6 +74,7 @@ export default function SmVehicles() {
   const [docStep, setDocStep] = useState(0);
   const [includeOptional, setIncludeOptional] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [gpsVendors, setGpsVendors] = useState([]);
   const [search, setSearch] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -98,9 +99,11 @@ export default function SmVehicles() {
 
   useEffect(() => {
     load().catch(console.error);
-    api
-      .get("/vehicle-types")
-      .then((r) => setVehicleTypes(r.data))
+    Promise.all([api.get("/vehicle-types"), api.get("/gps-vendors")])
+      .then(([vt, gv]) => {
+        setVehicleTypes(vt.data);
+        setGpsVendors(gv.data);
+      })
       .catch(console.error);
   }, []);
 
@@ -528,6 +531,7 @@ export default function SmVehicles() {
             value={form}
             onChange={setForm}
             vehicleTypes={vehicleTypes}
+            gpsVendors={gpsVendors}
             showStatus={false}
             showExpirySection={false}
             dense

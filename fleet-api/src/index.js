@@ -16,6 +16,7 @@ import dashboard from "./routes/dashboard.js";
 import indentBatches from "./routes/indentBatches.js";
 import notifications from "./routes/notifications.js";
 import vehicleTypes from "./routes/vehicleTypes.js";
+import gpsVendors from "./routes/gpsVendors.js";
 import smDashboard from "./routes/smDashboard.js";
 import amSites from "./routes/amSites.js";
 
@@ -54,6 +55,7 @@ app.use("/api/public/payments", paymentsPublic);
 app.use("/api/admin/dashboard", dashboard);
 app.use("/api/admin/notifications", notifications);
 app.use("/api/vehicle-types", vehicleTypes);
+app.use("/api/gps-vendors", gpsVendors);
 app.use("/api/sm/dashboard", smDashboard);
 
 app.use((err, _req, res, _next) => {

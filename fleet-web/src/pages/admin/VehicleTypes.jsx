@@ -8,6 +8,7 @@ export default function AdminVehicleTypes() {
   const [rows, setRows] = useState([]);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [passengerCount, setPassengerCount] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [search, setSearch] = useState("");
@@ -26,7 +27,7 @@ export default function AdminVehicleTypes() {
     return rows.filter((r) => {
       if (activeFilter === "active" && !r.is_active) return false;
       if (activeFilter === "disabled" && r.is_active) return false;
-      return matchSearch(r, search, ["name", "code"]);
+      return matchSearch(r, search, ["name", "code", "passenger_count"]);
     });
   }, [rows, search, activeFilter]);
 
@@ -38,6 +39,7 @@ export default function AdminVehicleTypes() {
       columns: [
         { header: "Name", value: (r) => r.name || "" },
         { header: "Code", value: (r) => r.code || "" },
+        { header: "Passengers", value: (r) => r.passenger_count ?? "" },
         { header: "Status", value: (r) => (r.is_active ? "Active" : "Disabled") },
       ],
     });
@@ -47,10 +49,20 @@ export default function AdminVehicleTypes() {
     e.preventDefault();
     setErr("");
     setMsg("");
+    const pax = Number(passengerCount);
+    if (!Number.isFinite(pax) || pax < 1 || pax > 100) {
+      setErr("No. of passengers must be between 1 and 100.");
+      return;
+    }
     try {
-      await api.post("/vehicle-types", { name, code: code || null });
+      await api.post("/vehicle-types", {
+        name,
+        code: code || null,
+        passenger_count: pax,
+      });
       setName("");
       setCode("");
+      setPassengerCount("");
       setMsg("Vehicle type added.");
       await load();
     } catch (ex) {
@@ -80,6 +92,23 @@ export default function AdminVehicleTypes() {
     }
   }
 
+  async function editPassengers(row) {
+    const next = window.prompt("No. of passengers", row.passenger_count != null ? String(row.passenger_count) : "");
+    if (next == null) return;
+    const pax = Number(String(next).trim());
+    if (!Number.isFinite(pax) || pax < 1 || pax > 100) {
+      setErr("No. of passengers must be between 1 and 100.");
+      return;
+    }
+    setErr("");
+    try {
+      await api.patch(`/vehicle-types/${row.id}`, { passenger_count: pax });
+      await load();
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
   async function remove(row) {
     if (!window.confirm(`Remove or disable "${row.name}"?`)) return;
     setErr("");
@@ -100,14 +129,14 @@ export default function AdminVehicleTypes() {
       <div>
         <h1 className="text-2xl font-bold text-btt-navy">Vehicle types</h1>
         <p className="text-sm text-slate-600 mt-1">
-          These appear in the vehicle type dropdown for Admin and Site Manager. Defaults (Sedan, SUV, TT, Bus, …) are
-          loaded automatically.
+          These appear in the vehicle type dropdown for Admin and Site Manager. No. of passengers is shown next to
+          the type and auto-fills when creating a vehicle. Defaults (Sedan, SUV, TT, Bus, …) are loaded automatically.
         </p>
       </div>
       {err && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">{err}</div>}
       {msg && <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
 
-      <form onSubmit={create} className="bg-white rounded-xl border border-slate-200 p-4 grid sm:grid-cols-3 gap-3">
+      <form onSubmit={create} className="bg-white rounded-xl border border-slate-200 p-4 grid sm:grid-cols-4 gap-3">
         <input
           className="border rounded-lg px-3 py-2 sm:col-span-2"
           placeholder="New type name * (e.g. Coach)"
@@ -121,7 +150,17 @@ export default function AdminVehicleTypes() {
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
         />
-        <button type="submit" className="sm:col-span-3 bg-btt-navy text-white rounded-lg py-2.5 font-medium">
+        <input
+          className="border rounded-lg px-3 py-2"
+          type="number"
+          min={1}
+          max={100}
+          placeholder="Passengers *"
+          value={passengerCount}
+          onChange={(e) => setPassengerCount(e.target.value.replace(/\D/g, "").slice(0, 3))}
+          required
+        />
+        <button type="submit" className="sm:col-span-4 bg-btt-navy text-white rounded-lg py-2.5 font-medium">
           Add vehicle type
         </button>
       </form>
@@ -133,7 +172,7 @@ export default function AdminVehicleTypes() {
           totalCount={rows.length}
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search name or code…"
+          searchPlaceholder="Search name, code, or passengers…"
           filters={[
             {
               key: "active",
@@ -155,15 +194,22 @@ export default function AdminVehicleTypes() {
             <tr>
               <th className="p-3">Name</th>
               <th className="p-3">Code</th>
+              <th className="p-3">Passengers</th>
               <th className="p-3">Status</th>
-              <th className="p-3 w-48">Actions</th>
+              <th className="p-3 w-56">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.map((r) => (
               <tr key={r.id} className={`border-t ${r.is_active ? "" : "bg-slate-50 text-slate-500"}`}>
-                <td className="p-3 font-medium">{r.name}</td>
+                <td className="p-3 font-medium">
+                  {r.name}
+                  {r.passenger_count != null ? (
+                    <span className="text-slate-500 font-normal"> · {r.passenger_count} pax</span>
+                  ) : null}
+                </td>
                 <td className="p-3 font-mono text-xs">{r.code || "—"}</td>
+                <td className="p-3">{r.passenger_count ?? "—"}</td>
                 <td className="p-3">
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-semibold ${
@@ -178,6 +224,13 @@ export default function AdminVehicleTypes() {
                     <button type="button" className="text-btt-navy font-medium hover:underline" onClick={() => rename(r)}>
                       Rename
                     </button>
+                    <button
+                      type="button"
+                      className="text-btt-navy font-medium hover:underline"
+                      onClick={() => editPassengers(r)}
+                    >
+                      Passengers
+                    </button>
                     <button type="button" className="text-slate-700 font-medium hover:underline" onClick={() => toggleActive(r)}>
                       {r.is_active ? "Disable" : "Enable"}
                     </button>
@@ -190,7 +243,7 @@ export default function AdminVehicleTypes() {
             ))}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={4} className="p-4 text-slate-500">
+                <td colSpan={5} className="p-4 text-slate-500">
                   {rows.length ? "No types match your filter." : "No types yet — defaults will appear after first load."}
                 </td>
               </tr>

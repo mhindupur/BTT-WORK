@@ -120,6 +120,17 @@ async function main() {
     );
   }
 
+  try {
+    const { ensureDefaultGpsVendors } = await import("./routes/gpsVendors.js");
+    await ensureDefaultGpsVendors();
+    console.log("[seed] GPS vendors ready.");
+  } catch (err) {
+    console.warn(
+      "[seed] Skipped GPS vendors (apply fleet-db/migration_010_passengers_gps_vendors.sql if table missing):",
+      err.message
+    );
+  }
+
   const adminUser = await queryOne("SELECT id FROM users WHERE email = ?", [adminEmail]);
   const demoBatch = await queryOne(
     "SELECT id FROM indent_serial_batches WHERE site_manager_id = ? AND description LIKE 'Demo seed%'",

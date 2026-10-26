@@ -261,7 +261,7 @@ export default function AdminVehicleApprovals() {
               </div>
             </div>
             <div>
-              <span className="text-slate-500">Date of registration</span>
+              <span className="text-slate-500">Induction date</span>
               <div className="font-semibold">{dateStr(selected.registration_date)}</div>
             </div>
             <div>

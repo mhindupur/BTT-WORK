@@ -50,6 +50,7 @@ export const emptyVehicleDetails = () => ({
   gps_installed: "0",
   gps_imei: "",
   gps_vendor: "",
+  gps_vendor_id: "",
   insurance_expiry: "",
   fitness_expiry: "",
   puc_expiry: "",
@@ -71,7 +72,7 @@ export function detailsFromVehicleRow(row = {}) {
       d[k] = row[k] ? String(row[k]).slice(0, 10) : "";
       continue;
     }
-    if (k === "manufacture_year" || k === "seating_capacity") {
+    if (k === "manufacture_year" || k === "seating_capacity" || k === "gps_vendor_id") {
       d[k] = row[k] != null && row[k] !== "" ? String(row[k]) : "";
       continue;
     }
@@ -105,6 +106,8 @@ export function detailsPayload(form) {
     gps_installed: form.gps_installed === "1" || form.gps_installed === true || form.gps_installed === 1,
     gps_imei: nullIfEmpty(form.gps_imei),
     gps_vendor: nullIfEmpty(form.gps_vendor),
+    gps_vendor_id:
+      form.gps_vendor_id === "" || form.gps_vendor_id == null ? null : Number(form.gps_vendor_id),
     insurance_expiry: nullIfEmpty(form.insurance_expiry),
     fitness_expiry: nullIfEmpty(form.fitness_expiry),
     puc_expiry: nullIfEmpty(form.puc_expiry),

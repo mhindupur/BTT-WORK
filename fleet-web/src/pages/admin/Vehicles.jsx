@@ -39,19 +39,22 @@ export default function AdminVehicles() {
   const [editing, setEditing] = useState(null);
   const [editErr, setEditErr] = useState("");
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [gpsVendors, setGpsVendors] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [siteFilter, setSiteFilter] = useState("");
 
   async function load() {
-    const [v, c, vt] = await Promise.all([
+    const [v, c, vt, gv] = await Promise.all([
       api.get("/admin/vehicles"),
       api.get("/clients"),
       api.get("/vehicle-types"),
+      api.get("/gps-vendors"),
     ]);
     setRows(v.data);
     setClients(c.data);
     setVehicleTypes(vt.data);
+    setGpsVendors(gv.data);
   }
 
   useEffect(() => {
@@ -278,7 +281,12 @@ export default function AdminVehicles() {
             />
           </label>
 
-          <VehicleInfoFields value={form} onChange={setForm} vehicleTypes={vehicleTypes} />
+          <VehicleInfoFields
+            value={form}
+            onChange={setForm}
+            vehicleTypes={vehicleTypes}
+            gpsVendors={gpsVendors}
+          />
 
           {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
           <div className="flex flex-wrap gap-2 justify-end">
@@ -500,7 +508,13 @@ export default function AdminVehicles() {
                 </p>
               ) : null}
 
-              <VehicleInfoFields value={editing} onChange={setEditing} vehicleTypes={vehicleTypes} dense />
+              <VehicleInfoFields
+                value={editing}
+                onChange={setEditing}
+                vehicleTypes={vehicleTypes}
+                gpsVendors={gpsVendors}
+                dense
+              />
 
               {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
               <div className="flex gap-2 justify-end">

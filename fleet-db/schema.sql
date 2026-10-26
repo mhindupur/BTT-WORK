@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS admin_notifications;
 DROP TABLE IF EXISTS vehicle_documents;
 DROP TABLE IF EXISTS vehicle_site_managers;
 DROP TABLE IF EXISTS vehicles;
+DROP TABLE IF EXISTS gps_vendors;
 DROP TABLE IF EXISTS vehicle_types;
 DROP TABLE IF EXISTS site_managers;
 DROP TABLE IF EXISTS clients;
@@ -84,6 +85,7 @@ CREATE TABLE vehicle_types (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(128) NOT NULL,
   code VARCHAR(32) NULL,
+  passenger_count TINYINT UNSIGNED NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   sort_order INT NOT NULL DEFAULT 100,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -92,11 +94,31 @@ CREATE TABLE vehicle_types (
   KEY ix_vehicle_types_active (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO vehicle_types (name, code, sort_order) VALUES
-  ('Sedan', 'SEDAN', 10),
-  ('SUV/MPV', 'SUVMPV', 20),
-  ('TT/Mini BUS', 'TTMINIBUS', 30),
-  ('BUS', 'BUS', 40);
+INSERT INTO vehicle_types (name, code, passenger_count, sort_order) VALUES
+  ('Sedan', 'SEDAN', 4, 10),
+  ('SUV/MPV', 'SUVMPV', 7, 20),
+  ('TT/Mini BUS', 'TTMINIBUS', 12, 30),
+  ('BUS', 'BUS', 40, 40);
+
+CREATE TABLE gps_vendors (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) NOT NULL,
+  code VARCHAR(32) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 100,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_gps_vendors_name (name),
+  KEY ix_gps_vendors_active (is_active, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO gps_vendors (name, code, sort_order) VALUES
+  ('MapMyIndia', 'MMI', 10),
+  ('Fleetx', 'FLEETX', 20),
+  ('LocoNav', 'LOCONAV', 30),
+  ('Wheelseye', 'WHEEL', 40),
+  ('TrackoBit', 'TRACKO', 50),
+  ('Other', 'OTHER', 900);
 
 CREATE TABLE vehicles (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -120,6 +142,7 @@ CREATE TABLE vehicles (
   gps_installed TINYINT(1) NOT NULL DEFAULT 0,
   gps_imei VARCHAR(64) NULL,
   gps_vendor VARCHAR(128) NULL,
+  gps_vendor_id BIGINT UNSIGNED NULL,
   insurance_expiry DATE NULL,
   fitness_expiry DATE NULL,
   puc_expiry DATE NULL,
@@ -145,6 +168,7 @@ CREATE TABLE vehicles (
   KEY ix_vehicles_type (vehicle_type_id),
   CONSTRAINT fk_veh_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE,
   CONSTRAINT fk_veh_type FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types (id) ON DELETE SET NULL,
+  CONSTRAINT fk_veh_gps_vendor FOREIGN KEY (gps_vendor_id) REFERENCES gps_vendors (id) ON DELETE SET NULL,
   CONSTRAINT fk_veh_submitted_sm FOREIGN KEY (submitted_by_site_manager_id) REFERENCES site_managers (id) ON DELETE SET NULL,
   CONSTRAINT fk_veh_reviewed_user FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

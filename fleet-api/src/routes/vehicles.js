@@ -59,6 +59,35 @@ async function resolveVehicleType(body, existing = {}) {
   return { vehicle_type_id: typeId, make_model: makeModel };
 }
 
+/** Resolve GPS vendor master id; keep legacy gps_vendor text in sync with vendor name. */
+async function resolveGpsVendor(body, existing = {}, gpsInstalled) {
+  if (!gpsInstalled) {
+    return { gps_vendor_id: null, gps_vendor: null };
+  }
+  const hasId = Object.prototype.hasOwnProperty.call(body, "gps_vendor_id");
+  let vendorId =
+    hasId
+      ? body.gps_vendor_id === "" || body.gps_vendor_id == null
+        ? null
+        : Number(body.gps_vendor_id)
+      : existing.gps_vendor_id != null
+        ? Number(existing.gps_vendor_id)
+        : null;
+  if (vendorId != null && !Number.isFinite(vendorId)) {
+    return { error: "Invalid GPS vendor", status: 400 };
+  }
+  if (vendorId) {
+    const v = await queryOne("SELECT id, name FROM gps_vendors WHERE id = ? AND is_active = 1", [vendorId]);
+    if (!v) return { error: "Invalid GPS vendor", status: 400 };
+    return { gps_vendor_id: v.id, gps_vendor: v.name };
+  }
+  let gpsVendor = existing.gps_vendor ?? null;
+  if (Object.prototype.hasOwnProperty.call(body, "gps_vendor")) {
+    gpsVendor = body.gps_vendor === "" || body.gps_vendor == null ? null : String(body.gps_vendor);
+  }
+  return { gps_vendor_id: null, gps_vendor: gpsVendor };
+}
+
 const VEHICLE_STRING_FIELDS = [
   "owner_name",
   "owner_phone",
@@ -85,7 +114,7 @@ const VEHICLE_STRING_FIELDS = [
 
 const VEHICLE_INSERT_COLS = `owner_name, owner_phone, ownership, make_model, vehicle_type_id, fuel_type,
   seating_capacity, registration_date, manufacture_year, attach_date, sub_vendor, engine_number, chassis_number, ac_type,
-  gps_installed, gps_imei, gps_vendor,
+  gps_installed, gps_imei, gps_vendor, gps_vendor_id,
   insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry, form_42_47_expiry, form_49_expiry`;
 
 function vehicleFieldValues(f, typeRes) {
@@ -107,6 +136,7 @@ function vehicleFieldValues(f, typeRes) {
     f.gps_installed,
     f.gps_imei,
     f.gps_vendor,
+    f.gps_vendor_id,
     f.insurance_expiry,
     f.fitness_expiry,
     f.puc_expiry,
@@ -135,6 +165,7 @@ function pickVehicleFields(body, existing = {}) {
     gps_installed: existing.gps_installed != null ? Number(existing.gps_installed) : 0,
     gps_imei: existing.gps_imei ?? null,
     gps_vendor: existing.gps_vendor ?? null,
+    gps_vendor_id: existing.gps_vendor_id ?? null,
     insurance_expiry: existing.insurance_expiry ?? null,
     fitness_expiry: existing.fitness_expiry ?? null,
     puc_expiry: existing.puc_expiry ?? null,
@@ -297,6 +328,10 @@ admin.post("/", async (req, res) => {
   const f = pickVehicleFields(req.body || {});
   const typeRes = await resolveVehicleType(req.body || {}, {});
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const gpsRes = await resolveGpsVendor(req.body || {}, {}, f.gps_installed);
+  if (gpsRes.error) return res.status(gpsRes.status).json({ error: gpsRes.error });
+  f.gps_vendor_id = gpsRes.gps_vendor_id;
+  f.gps_vendor = gpsRes.gps_vendor;
   const client = await queryOne("SELECT * FROM clients WHERE id = ?", [cid]);
   if (!client) return res.status(404).json({ error: "Site / client not found" });
   const slaErr = assertVehicleSla(client, f);
@@ -307,7 +342,7 @@ admin.post("/", async (req, res) => {
     `INSERT INTO vehicles (
       client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
     [cid, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes]
   );
   const vid = result.insertId;
@@ -344,6 +379,10 @@ admin.patch("/:id", async (req, res) => {
   const f = pickVehicleFields(body, existing);
   const typeRes = await resolveVehicleType(body, existing);
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const gpsRes = await resolveGpsVendor(body, existing, f.gps_installed);
+  if (gpsRes.error) return res.status(gpsRes.status).json({ error: gpsRes.error });
+  f.gps_vendor_id = gpsRes.gps_vendor_id;
+  f.gps_vendor = gpsRes.gps_vendor;
   const client = await queryOne("SELECT * FROM clients WHERE id = ?", [client_id]);
   if (!client) return res.status(404).json({ error: "Site / client not found" });
   const slaErr = assertVehicleSla(client, f);
@@ -353,7 +392,7 @@ admin.patch("/:id", async (req, res) => {
       owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
       seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?,
       engine_number=?, chassis_number=?, ac_type=?,
-      gps_installed=?, gps_imei=?, gps_vendor=?,
+      gps_installed=?, gps_imei=?, gps_vendor=?, gps_vendor_id=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
       form_42_47_expiry=?, form_49_expiry=?, is_active=?, notes=? WHERE id=?`,
     [client_id, registration_number, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes, id]
@@ -502,6 +541,10 @@ sm.post("/", async (req, res) => {
   const f = pickVehicleFields(req.body || {});
   const typeRes = await resolveVehicleType(req.body || {}, {});
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const gpsRes = await resolveGpsVendor(req.body || {}, {}, f.gps_installed);
+  if (gpsRes.error) return res.status(gpsRes.status).json({ error: gpsRes.error });
+  f.gps_vendor_id = gpsRes.gps_vendor_id;
+  f.gps_vendor = gpsRes.gps_vendor;
   const client = await queryOne("SELECT * FROM clients WHERE id = ?", [smRow.client_id]);
   const slaErr = assertVehicleSla(client, f);
   if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
@@ -511,7 +554,7 @@ sm.post("/", async (req, res) => {
     `INSERT INTO vehicles (
       client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, submitted_by_site_manager_id, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
     [smRow.client_id, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), smRow.id, f.notes]
   );
   res.status(201).json(
@@ -551,6 +594,10 @@ sm.patch("/:id", async (req, res) => {
   const f = pickVehicleFields(body, existing);
   const typeRes = await resolveVehicleType(body, existing);
   if (typeRes.error) return res.status(typeRes.status).json({ error: typeRes.error });
+  const gpsRes = await resolveGpsVendor(body, existing, f.gps_installed);
+  if (gpsRes.error) return res.status(gpsRes.status).json({ error: gpsRes.error });
+  f.gps_vendor_id = gpsRes.gps_vendor_id;
+  f.gps_vendor = gpsRes.gps_vendor;
   const client = await queryOne("SELECT * FROM clients WHERE id = ?", [existing.client_id]);
   const slaErr = assertVehicleSla(client, f);
   if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
@@ -559,7 +606,7 @@ sm.patch("/:id", async (req, res) => {
       owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
       seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?,
       engine_number=?, chassis_number=?, ac_type=?,
-      gps_installed=?, gps_imei=?, gps_vendor=?,
+      gps_installed=?, gps_imei=?, gps_vendor=?, gps_vendor_id=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
       form_42_47_expiry=?, form_49_expiry=?, notes=?,
       approval_status='draft', rejection_note=NULL WHERE id=?`,
