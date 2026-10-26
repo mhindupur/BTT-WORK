@@ -8,9 +8,19 @@ import {
   ownershipLabel,
   VENDOR_TYPE_OPTIONS,
 } from "../../constants/vehicleFields";
-import { clientLabel, formatRegInput, formatSiteCodeInput, isSlaExceeded, normalizeVehicleRegistration } from "../../utils/vehicleReg";
+import {
+  clientLabel,
+  formatRegInput,
+  formatSiteCodeInput,
+  isSlaExceeded,
+  normalizeVehicleRegistration,
+} from "../../utils/vehicleReg";
 
-const emptySite = () => ({
+const emptyCombined = () => ({
+  // site mode: new | existing
+  site_mode: "new",
+  existing_client_id: "",
+  // site fields (used when site_mode === "new")
   name: "",
   site_code: "",
   email: "",
@@ -22,10 +32,7 @@ const emptySite = () => ({
   vendor_type: "",
   sla_max_age_years: "",
   account_manager_user_id: "",
-});
-
-const emptyVehicle = () => ({
-  client_id: "",
+  // vehicle + assignment
   site_manager_id: "",
   vehicle_type_id: "",
   registration_number: "",
@@ -64,7 +71,8 @@ function sitePayload(form) {
     start_date: form.start_date || null,
     vendor_type: form.vendor_type || null,
     sla_max_age_years: form.sla_max_age_years === "" ? null : Number(form.sla_max_age_years),
-    account_manager_user_id: form.account_manager_user_id === "" ? null : Number(form.account_manager_user_id),
+    account_manager_user_id:
+      form.account_manager_user_id === "" ? null : Number(form.account_manager_user_id),
   };
 }
 
@@ -74,14 +82,15 @@ export default function AdminClients() {
   const [managers, setManagers] = useState([]);
   const [accountManagers, setAccountManagers] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
-  const [siteFilter, setSiteFilter] = useState("");
+  const [form, setForm] = useState(emptyCombined);
   const [search, setSearch] = useState("");
-  const [siteForm, setSiteForm] = useState(emptySite);
-  const [vehicleForm, setVehicleForm] = useState(emptyVehicle);
+  const [siteFilter, setSiteFilter] = useState("");
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
   const [editingSite, setEditingSite] = useState(null);
   const [editingVehicle, setEditingVehicle] = useState(null);
-  const [err, setErr] = useState("");
-  const [vehicleErr, setVehicleErr] = useState("");
+  const [editErr, setEditErr] = useState("");
 
   async function load() {
     const [c, v, sm, am, vt] = await Promise.all([
@@ -102,11 +111,10 @@ export default function AdminClients() {
     load().catch(console.error);
   }, []);
 
-  const managersForVehicleForm = useMemo(() => {
-    const cid = vehicleForm.client_id || siteFilter;
-    if (!cid) return [];
-    return managers.filter((m) => String(m.client_id) === String(cid));
-  }, [managers, vehicleForm.client_id, siteFilter]);
+  const managersForForm = useMemo(() => {
+    if (form.site_mode !== "existing" || !form.existing_client_id) return [];
+    return managers.filter((m) => String(m.client_id) === String(form.existing_client_id));
+  }, [managers, form.site_mode, form.existing_client_id]);
 
   const managersForEditVehicle = useMemo(() => {
     if (!editingVehicle?.client_id) return [];
@@ -137,61 +145,72 @@ export default function AdminClients() {
     });
   }, [vehicles, siteFilter, search]);
 
-  async function createSite(e) {
+  async function submitCombined(e) {
     e.preventDefault();
     setErr("");
+    setMsg("");
+    setSaving(true);
     try {
-      await api.post("/clients", sitePayload(siteForm));
-      setSiteForm(emptySite());
-      load();
+      const reg = normalizeVehicleRegistration(form.registration_number);
+      if (!reg) {
+        setErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
+        return;
+      }
+
+      let clientId = null;
+      if (form.site_mode === "existing") {
+        if (!form.existing_client_id) {
+          setErr("Select an existing site, or switch to New site");
+          return;
+        }
+        clientId = Number(form.existing_client_id);
+      } else {
+        if (!form.name?.trim() || !form.site_code?.trim()) {
+          setErr("Site name and 5-character site code are required");
+          return;
+        }
+        const { data: createdSite } = await api.post("/clients", sitePayload(form));
+        clientId = createdSite.id;
+      }
+
+      await api.post("/admin/vehicles", {
+        client_id: clientId,
+        registration_number: reg,
+        vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
+        site_manager_id: form.site_manager_id === "" ? null : Number(form.site_manager_id),
+        is_active: form.is_active !== false,
+        ...detailsPayload(form),
+      });
+
+      setMsg(
+        form.site_mode === "new"
+          ? "Site and vehicle saved (separate tables: clients + vehicles)."
+          : "Vehicle added to the selected site."
+      );
+      setForm(emptyCombined());
+      setSiteFilter(String(clientId));
+      await load();
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
+    } finally {
+      setSaving(false);
     }
   }
 
   async function saveSite(e) {
     e.preventDefault();
-    setErr("");
+    setEditErr("");
     try {
       await api.patch(`/clients/${editingSite.id}`, sitePayload(editingSite));
       setEditingSite(null);
       load();
     } catch (ex) {
-      setErr(ex.response?.data?.error || ex.message);
-    }
-  }
-
-  async function createVehicle(e) {
-    e.preventDefault();
-    setVehicleErr("");
-    const clientId = vehicleForm.client_id || siteFilter;
-    if (!clientId) {
-      setVehicleErr("Select a site first");
-      return;
-    }
-    const reg = normalizeVehicleRegistration(vehicleForm.registration_number);
-    if (!reg) {
-      setVehicleErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
-      return;
-    }
-    try {
-      await api.post("/admin/vehicles", {
-        client_id: Number(clientId),
-        registration_number: reg,
-        vehicle_type_id: vehicleForm.vehicle_type_id === "" ? null : Number(vehicleForm.vehicle_type_id),
-        site_manager_id: vehicleForm.site_manager_id === "" ? null : Number(vehicleForm.site_manager_id),
-        is_active: vehicleForm.is_active !== false,
-        ...detailsPayload(vehicleForm),
-      });
-      setVehicleForm(emptyVehicle());
-      load();
-    } catch (ex) {
-      setVehicleErr(ex.response?.data?.error || ex.message);
+      setEditErr(ex.response?.data?.error || ex.message);
     }
   }
 
   function openEditVehicle(row) {
-    setVehicleErr("");
+    setEditErr("");
     setEditingVehicle({
       id: row.id,
       client_id: String(row.client_id),
@@ -206,182 +225,290 @@ export default function AdminClients() {
 
   async function saveVehicle(e) {
     e.preventDefault();
-    setVehicleErr("");
+    setEditErr("");
     const reg = normalizeVehicleRegistration(editingVehicle.registration_number);
     if (!reg) {
-      setVehicleErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
+      setEditErr("Enter vehicle number in CAPS without hyphen, e.g. KA01MM1234");
       return;
     }
     try {
       await api.patch(`/admin/vehicles/${editingVehicle.id}`, {
         client_id: Number(editingVehicle.client_id),
         registration_number: reg,
-        vehicle_type_id: editingVehicle.vehicle_type_id === "" ? null : Number(editingVehicle.vehicle_type_id),
-        site_manager_id: editingVehicle.site_manager_id === "" ? null : Number(editingVehicle.site_manager_id),
+        vehicle_type_id:
+          editingVehicle.vehicle_type_id === "" ? null : Number(editingVehicle.vehicle_type_id),
+        site_manager_id:
+          editingVehicle.site_manager_id === "" ? null : Number(editingVehicle.site_manager_id),
         is_active: editingVehicle.is_active !== false,
         ...detailsPayload(editingVehicle),
       });
       setEditingVehicle(null);
       load();
     } catch (ex) {
-      setVehicleErr(ex.response?.data?.error || ex.message);
+      setEditErr(ex.response?.data?.error || ex.message);
     }
   }
 
-  const siteFields = (value, setValue) => (
-    <>
-      <input
-        className="border rounded-lg px-3 py-2"
-        placeholder="Site / company name *"
-        value={value.name}
-        onChange={(e) => setValue({ ...value, name: e.target.value })}
-        required
-      />
-      <input
-        className="border rounded-lg px-3 py-2 font-mono uppercase"
-        placeholder="Site code * (5 chars, e.g. INFNG)"
-        maxLength={5}
-        value={value.site_code}
-        onChange={(e) => setValue({ ...value, site_code: formatSiteCodeInput(e.target.value) })}
-        required
-      />
-      <select
-        className="border rounded-lg px-3 py-2 bg-white md:col-span-2"
-        value={value.account_manager_user_id}
-        onChange={(e) => setValue({ ...value, account_manager_user_id: e.target.value })}
-      >
-        <option value="">Account manager (optional)</option>
-        {accountManagers.map((am) => (
-          <option key={am.id} value={am.id}>
-            {am.full_name} — {am.email}
-          </option>
-        ))}
-      </select>
-      <input
-        className="border rounded-lg px-3 py-2"
-        placeholder="Email"
-        value={value.email}
-        onChange={(e) => setValue({ ...value, email: e.target.value })}
-      />
-      <input
-        className="border rounded-lg px-3 py-2"
-        placeholder="Phone"
-        value={value.phone}
-        onChange={(e) => setValue({ ...value, phone: e.target.value })}
-      />
-      <input
-        className="border rounded-lg px-3 py-2 md:col-span-2"
-        placeholder="Address"
-        value={value.address}
-        onChange={(e) => setValue({ ...value, address: e.target.value })}
-      />
-      <input
-        className="border rounded-lg px-3 py-2"
-        placeholder="Latitude"
-        value={value.latitude}
-        onChange={(e) => setValue({ ...value, latitude: e.target.value })}
-      />
-      <input
-        className="border rounded-lg px-3 py-2"
-        placeholder="Longitude"
-        value={value.longitude}
-        onChange={(e) => setValue({ ...value, longitude: e.target.value })}
-      />
-      <label className="block">
-        <span className="text-xs font-semibold text-slate-600">Site start date</span>
-        <input
-          className="mt-1 w-full border rounded-lg px-3 py-2"
-          type="date"
-          value={value.start_date}
-          onChange={(e) => setValue({ ...value, start_date: e.target.value })}
-        />
-      </label>
-      <select
-        className="border rounded-lg px-3 py-2 bg-white"
-        value={value.vendor_type}
-        onChange={(e) => setValue({ ...value, vendor_type: e.target.value })}
-      >
-        <option value="">Vendor type</option>
-        {VENDOR_TYPE_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <label className="block md:col-span-2">
-        <span className="text-xs font-semibold text-slate-600">
-          SLA — max vehicle age (years). Leave blank for no limit.
-        </span>
-        <input
-          className="mt-1 w-full border rounded-lg px-3 py-2"
-          type="number"
-          min={1}
-          max={30}
-          placeholder="e.g. 3"
-          value={value.sla_max_age_years}
-          onChange={(e) => setValue({ ...value, sla_max_age_years: e.target.value.replace(/\D/g, "").slice(0, 2) })}
-        />
-      </label>
-    </>
-  );
-
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-btt-navy">Sites &amp; Vehicles</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Manage sites and their vehicles on one screen. Database tables stay separate (
-          <code className="text-xs">clients</code>, <code className="text-xs">vehicles</code>
-          ).
+          One form captures site and vehicle together. Data is still stored in separate tables (
+          <code className="text-xs">clients</code> and <code className="text-xs">vehicles</code>).
         </p>
       </div>
 
+      {msg && <p className="text-sm text-green-700">{msg}</p>}
       {err && <p className="text-sm text-red-700">{err}</p>}
 
-      <section>
-        <h2 className="text-lg font-semibold text-btt-navy mb-3">1. Sites</h2>
-        <form onSubmit={createSite} className="bg-white p-4 rounded-xl border border-slate-200 mb-4 grid md:grid-cols-2 gap-3">
-          {siteFields(siteForm, setSiteForm)}
-          <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 md:col-span-2">
-            Add site
-          </button>
-        </form>
+      <form
+        onSubmit={submitCombined}
+        className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6"
+      >
+        <div className="flex flex-wrap gap-4 items-center">
+          <span className="text-sm font-semibold text-slate-700">Site</span>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="site_mode"
+              checked={form.site_mode === "new"}
+              onChange={() =>
+                setForm({
+                  ...form,
+                  site_mode: "new",
+                  existing_client_id: "",
+                  site_manager_id: "",
+                })
+              }
+            />
+            New site
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="site_mode"
+              checked={form.site_mode === "existing"}
+              onChange={() => setForm({ ...form, site_mode: "existing", site_manager_id: "" })}
+            />
+            Existing site
+          </label>
+        </div>
+
+        {form.site_mode === "existing" ? (
+          <div className="grid md:grid-cols-2 gap-3">
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.existing_client_id}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  existing_client_id: e.target.value,
+                  site_manager_id: "",
+                })
+              }
+              required
+            >
+              <option value="">Select site *</option>
+              {sites.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {clientLabel(c)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="border rounded-lg px-3 py-2"
+              value={form.site_manager_id}
+              onChange={(e) => setForm({ ...form, site_manager_id: e.target.value })}
+              disabled={!form.existing_client_id}
+            >
+              <option value="">Site manager (optional)</option>
+              {managersForForm.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.full_name} — {m.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-3">
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Site / company name *"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required={form.site_mode === "new"}
+            />
+            <input
+              className="border rounded-lg px-3 py-2 font-mono uppercase"
+              placeholder="Site code * (5 chars, e.g. INFNG)"
+              maxLength={5}
+              value={form.site_code}
+              onChange={(e) => setForm({ ...form, site_code: formatSiteCodeInput(e.target.value) })}
+              required={form.site_mode === "new"}
+            />
+            <select
+              className="border rounded-lg px-3 py-2 bg-white md:col-span-2"
+              value={form.account_manager_user_id}
+              onChange={(e) => setForm({ ...form, account_manager_user_id: e.target.value })}
+            >
+              <option value="">Account manager (optional)</option>
+              {accountManagers.map((am) => (
+                <option key={am.id} value={am.id}>
+                  {am.full_name} — {am.email}
+                </option>
+              ))}
+            </select>
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Site email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Site phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Address"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Latitude"
+              value={form.latitude}
+              onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Longitude"
+              value={form.longitude}
+              onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+            />
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-600">Site start date</span>
+              <input
+                className="mt-1 w-full border rounded-lg px-3 py-2"
+                type="date"
+                value={form.start_date}
+                onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+              />
+            </label>
+            <select
+              className="border rounded-lg px-3 py-2 bg-white"
+              value={form.vendor_type}
+              onChange={(e) => setForm({ ...form, vendor_type: e.target.value })}
+            >
+              <option value="">Vendor type</option>
+              {VENDOR_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <label className="block md:col-span-2">
+              <span className="text-xs font-semibold text-slate-600">
+                SLA — max vehicle age (years). Leave blank for no limit.
+              </span>
+              <input
+                className="mt-1 w-full border rounded-lg px-3 py-2"
+                type="number"
+                min={1}
+                max={30}
+                placeholder="e.g. 3"
+                value={form.sla_max_age_years}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    sla_max_age_years: e.target.value.replace(/\D/g, "").slice(0, 2),
+                  })
+                }
+              />
+            </label>
+            <p className="md:col-span-2 text-xs text-slate-500">
+              Site manager can be assigned after the site exists (Site Managers page), or choose an
+              existing site above if the manager is already linked.
+            </p>
+          </div>
+        )}
+
+        <div className="border-t border-slate-100 pt-4 space-y-4">
+          <h2 className="text-sm font-semibold text-btt-navy uppercase tracking-wide">Vehicle</h2>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
+            <input
+              className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
+              placeholder="KA01MM1234"
+              value={form.registration_number}
+              onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
+              required
+            />
+          </label>
+          <VehicleInfoFields value={form} onChange={setForm} vehicleTypes={vehicleTypes} />
+        </div>
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="bg-btt-navy text-white rounded-lg py-2.5 px-5 font-medium disabled:opacity-60"
+        >
+          {saving
+            ? "Saving…"
+            : form.site_mode === "new"
+              ? "Save site + vehicle"
+              : "Save vehicle to site"}
+        </button>
+      </form>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-lg font-semibold text-btt-navy">Records</h2>
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="border rounded-lg px-3 py-2 text-sm bg-white"
+              value={siteFilter}
+              onChange={(e) => setSiteFilter(e.target.value)}
+            >
+              <option value="">All sites</option>
+              {sites.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {clientLabel(c)}
+                </option>
+              ))}
+            </select>
+            <input
+              className="border rounded-lg px-3 py-2 text-sm min-w-[200px]"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-2 border-b bg-slate-50 text-xs font-semibold text-slate-600">
+            Sites ({sites.length}) — click Edit to change site details / account manager
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="text-left p-3">Site</th>
                 <th className="text-left p-3">Code</th>
                 <th className="text-left p-3">Account manager</th>
-                <th className="text-left p-3">Vendor</th>
                 <th className="text-left p-3">SLA</th>
                 <th className="text-left p-3 w-20"> </th>
               </tr>
             </thead>
             <tbody>
               {sites.map((c) => (
-                <tr
-                  key={c.id}
-                  className={`border-t border-slate-100 ${
-                    String(siteFilter) === String(c.id) ? "bg-sky-50" : ""
-                  }`}
-                >
-                  <td className="p-3 font-medium">
-                    <button
-                      type="button"
-                      className="text-left hover:underline text-btt-navy"
-                      onClick={() => {
-                        setSiteFilter(String(c.id));
-                        setVehicleForm((f) => ({ ...f, client_id: String(c.id), site_manager_id: "" }));
-                      }}
-                      title="Filter vehicles for this site"
-                    >
-                      {c.name}
-                    </button>
-                  </td>
+                <tr key={c.id} className="border-t border-slate-100">
+                  <td className="p-3 font-medium">{c.name}</td>
                   <td className="p-3 font-mono">{c.site_code || "—"}</td>
                   <td className="p-3 text-slate-600">{c.account_manager_names || "—"}</td>
-                  <td className="p-3">{c.vendor_type || "—"}</td>
                   <td className="p-3">{c.sla_max_age_years ? `< ${c.sla_max_age_years} yrs` : "—"}</td>
                   <td className="p-3">
                     <button
@@ -397,101 +524,12 @@ export default function AdminClients() {
             </tbody>
           </table>
         </div>
-      </section>
 
-      <section>
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
-          <div>
-            <h2 className="text-lg font-semibold text-btt-navy">2. Vehicles</h2>
-            <p className="text-xs text-slate-500">Click a site name above, or pick a filter, to focus one site.</p>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-2 border-b bg-slate-50 text-xs font-semibold text-slate-600">
+            Vehicles ({filteredVehicles.length}
+            {siteFilter ? " for filter" : ""})
           </div>
-          <div className="flex flex-wrap gap-2">
-            <select
-              className="border rounded-lg px-3 py-2 text-sm bg-white"
-              value={siteFilter}
-              onChange={(e) => {
-                setSiteFilter(e.target.value);
-                setVehicleForm((f) => ({
-                  ...f,
-                  client_id: e.target.value,
-                  site_manager_id: "",
-                }));
-              }}
-            >
-              <option value="">All sites</option>
-              {sites.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {clientLabel(c)}
-                </option>
-              ))}
-            </select>
-            <input
-              className="border rounded-lg px-3 py-2 text-sm min-w-[220px]"
-              placeholder="Search vehicles…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <form
-          onSubmit={createVehicle}
-          className="bg-white p-4 rounded-xl border border-slate-200 mb-4 space-y-4 shadow-sm"
-        >
-          <div className="grid md:grid-cols-2 gap-3">
-            <select
-              className="border rounded-lg px-3 py-2"
-              value={vehicleForm.client_id || siteFilter}
-              onChange={(e) =>
-                setVehicleForm({
-                  ...vehicleForm,
-                  client_id: e.target.value,
-                  site_manager_id: "",
-                })
-              }
-              required
-            >
-              <option value="">Client / site *</option>
-              {sites.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {clientLabel(c)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="border rounded-lg px-3 py-2"
-              value={vehicleForm.site_manager_id}
-              onChange={(e) => setVehicleForm({ ...vehicleForm, site_manager_id: e.target.value })}
-              disabled={!(vehicleForm.client_id || siteFilter)}
-            >
-              <option value="">Site manager (optional)</option>
-              {managersForVehicleForm.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.full_name} — {m.email}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
-            <input
-              className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
-              placeholder="KA01MM1234"
-              value={vehicleForm.registration_number}
-              onChange={(e) =>
-                setVehicleForm({ ...vehicleForm, registration_number: formatRegInput(e.target.value) })
-              }
-              required
-            />
-          </label>
-          <VehicleInfoFields value={vehicleForm} onChange={setVehicleForm} vehicleTypes={vehicleTypes} />
-          {vehicleErr && !editingVehicle && <p className="text-red-600 text-sm">{vehicleErr}</p>}
-          <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
-            Add vehicle
-          </button>
-        </form>
-
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
@@ -499,49 +537,41 @@ export default function AdminClients() {
                 <th className="text-left p-3">Serial</th>
                 <th className="text-left p-3">Type</th>
                 <th className="text-left p-3">Ownership</th>
-                <th className="text-left p-3">Status</th>
                 <th className="text-left p-3">Site</th>
                 <th className="text-left p-3">Owner</th>
-                <th className="text-left p-3 w-24"> </th>
+                <th className="text-left p-3 w-20"> </th>
               </tr>
             </thead>
             <tbody>
-              {filteredVehicles.map((v) => {
-                const pending = v.approval_status === "pending_review";
-                const slaOver = isSlaExceeded(v);
-                return (
-                  <tr
-                    key={v.id}
-                    className={`border-t border-slate-100 ${
-                      slaOver ? "bg-orange-100" : pending ? "bg-amber-50" : ""
-                    }`}
-                  >
-                    <td className="p-3 font-mono font-medium">{v.registration_number}</td>
-                    <td className="p-3 font-mono text-xs">{v.vehicle_serial || "—"}</td>
-                    <td className="p-3">{v.vehicle_type_name || v.make_model || "—"}</td>
-                    <td className="p-3">{ownershipLabel(v.ownership)}</td>
-                    <td className="p-3">{v.approval_status || "—"}</td>
-                    <td className="p-3">
-                      {v.client_name}
-                      {v.site_code ? ` (${v.site_code})` : ""}
-                    </td>
-                    <td className="p-3">{v.owner_name || "—"}</td>
-                    <td className="p-3">
-                      <button
-                        type="button"
-                        onClick={() => openEditVehicle(v)}
-                        className="text-btt-navy font-medium hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredVehicles.map((v) => (
+                <tr
+                  key={v.id}
+                  className={`border-t border-slate-100 ${isSlaExceeded(v) ? "bg-orange-50" : ""}`}
+                >
+                  <td className="p-3 font-mono font-medium">{v.registration_number}</td>
+                  <td className="p-3 font-mono text-xs">{v.vehicle_serial || "—"}</td>
+                  <td className="p-3">{v.vehicle_type_name || v.make_model || "—"}</td>
+                  <td className="p-3">{ownershipLabel(v.ownership)}</td>
+                  <td className="p-3">
+                    {v.client_name}
+                    {v.site_code ? ` (${v.site_code})` : ""}
+                  </td>
+                  <td className="p-3">{v.owner_name || "—"}</td>
+                  <td className="p-3">
+                    <button
+                      type="button"
+                      className="text-btt-navy font-medium hover:underline"
+                      onClick={() => openEditVehicle(v)}
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
               {!filteredVehicles.length && (
                 <tr>
-                  <td colSpan={8} className="p-4 text-slate-500">
-                    No vehicles for this filter.
+                  <td colSpan={7} className="p-4 text-slate-500">
+                    No vehicles yet. Use the form above to add site + vehicle.
                   </td>
                 </tr>
               )}
@@ -557,13 +587,104 @@ export default function AdminClients() {
             className="bg-white rounded-xl border shadow-xl max-w-2xl w-full p-6 grid md:grid-cols-2 gap-3 max-h-[90vh] overflow-y-auto"
           >
             <h2 className="text-lg font-bold text-btt-navy md:col-span-2">Edit site</h2>
-            {siteFields(editingSite, setEditingSite)}
+            <input
+              className="border rounded-lg px-3 py-2"
+              value={editingSite.name}
+              onChange={(e) => setEditingSite({ ...editingSite, name: e.target.value })}
+              required
+            />
+            <input
+              className="border rounded-lg px-3 py-2 font-mono uppercase"
+              maxLength={5}
+              value={editingSite.site_code}
+              onChange={(e) =>
+                setEditingSite({ ...editingSite, site_code: formatSiteCodeInput(e.target.value) })
+              }
+              required
+            />
+            <select
+              className="border rounded-lg px-3 py-2 bg-white md:col-span-2"
+              value={editingSite.account_manager_user_id}
+              onChange={(e) =>
+                setEditingSite({ ...editingSite, account_manager_user_id: e.target.value })
+              }
+            >
+              <option value="">Account manager (optional)</option>
+              {accountManagers.map((am) => (
+                <option key={am.id} value={am.id}>
+                  {am.full_name} — {am.email}
+                </option>
+              ))}
+            </select>
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Email"
+              value={editingSite.email}
+              onChange={(e) => setEditingSite({ ...editingSite, email: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Phone"
+              value={editingSite.phone}
+              onChange={(e) => setEditingSite({ ...editingSite, phone: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Address"
+              value={editingSite.address}
+              onChange={(e) => setEditingSite({ ...editingSite, address: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Latitude"
+              value={editingSite.latitude}
+              onChange={(e) => setEditingSite({ ...editingSite, latitude: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Longitude"
+              value={editingSite.longitude}
+              onChange={(e) => setEditingSite({ ...editingSite, longitude: e.target.value })}
+            />
+            <input
+              className="border rounded-lg px-3 py-2"
+              type="date"
+              value={editingSite.start_date}
+              onChange={(e) => setEditingSite({ ...editingSite, start_date: e.target.value })}
+            />
+            <select
+              className="border rounded-lg px-3 py-2 bg-white"
+              value={editingSite.vendor_type}
+              onChange={(e) => setEditingSite({ ...editingSite, vendor_type: e.target.value })}
+            >
+              <option value="">Vendor type</option>
+              {VENDOR_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              type="number"
+              min={1}
+              max={30}
+              placeholder="SLA max age years"
+              value={editingSite.sla_max_age_years}
+              onChange={(e) =>
+                setEditingSite({
+                  ...editingSite,
+                  sla_max_age_years: e.target.value.replace(/\D/g, "").slice(0, 2),
+                })
+              }
+            />
+            {editErr && <p className="text-red-600 text-sm md:col-span-2">{editErr}</p>}
             <div className="md:col-span-2 flex justify-end gap-2">
               <button type="button" className="px-4 py-2 rounded-lg border" onClick={() => setEditingSite(null)}>
                 Cancel
               </button>
               <button type="submit" className="px-4 py-2 rounded-lg bg-btt-navy text-white">
-                Save
+                Save site
               </button>
             </div>
           </form>
@@ -615,14 +736,23 @@ export default function AdminClients() {
                   })
                 }
               />
-              <VehicleInfoFields value={editingVehicle} onChange={setEditingVehicle} vehicleTypes={vehicleTypes} dense />
-              {vehicleErr && <p className="text-red-600 text-sm">{vehicleErr}</p>}
+              <VehicleInfoFields
+                value={editingVehicle}
+                onChange={setEditingVehicle}
+                vehicleTypes={vehicleTypes}
+                dense
+              />
+              {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
               <div className="flex justify-end gap-2">
-                <button type="button" className="px-4 py-2 rounded-lg border" onClick={() => setEditingVehicle(null)}>
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg border"
+                  onClick={() => setEditingVehicle(null)}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="px-4 py-2 rounded-lg bg-btt-navy text-white">
-                  Save
+                  Save vehicle
                 </button>
               </div>
             </form>
