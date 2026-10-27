@@ -157,22 +157,47 @@ export default function VehicleInfoFields({
     <div className="space-y-4">
       <div>
         <div className="text-sm font-bold text-btt-navy mb-2">Vehicle information</div>
+        <div className="mb-4">
+          <div className={labelCls}>Ownership type *</div>
+          <div
+            className="grid grid-cols-2 lg:grid-cols-4 gap-2"
+            role="radiogroup"
+            aria-label="Ownership type"
+          >
+            {OWNERSHIP_OPTIONS.map((o) => {
+              const selected = ownership === o.value;
+              return (
+                <label
+                  key={o.value}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer transition select-none ${
+                    selected
+                      ? "border-btt-green bg-btt-green/10 ring-1 ring-btt-green text-btt-navy"
+                      : "border-slate-200 bg-white hover:border-btt-accent/50 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="vehicle-ownership"
+                    className="h-4 w-4 accent-btt-green shrink-0"
+                    value={o.value}
+                    checked={selected}
+                    onChange={() => onOwnershipChange(o.value)}
+                    required
+                  />
+                  <span className="text-sm font-semibold leading-tight">{o.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {ownershipMeta?.help ? (
+            <p className="mt-2 text-[11px] text-slate-500">{ownershipMeta.help}</p>
+          ) : (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Select one ownership type. Matching driver / owner / vendor fields appear below.
+            </p>
+          )}
+        </div>
         <div className={grid}>
-          <Labeled label="Ownership type *" hint={ownershipMeta?.help}>
-            <select
-              className={inputCls}
-              value={ownership}
-              onChange={(e) => onOwnershipChange(e.target.value)}
-              required
-            >
-              <option value="">Select ownership</option>
-              {OWNERSHIP_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </Labeled>
           {showVehicleType ? (
             <Labeled label="Model / type">
               <select
