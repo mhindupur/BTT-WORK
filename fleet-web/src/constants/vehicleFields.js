@@ -1,9 +1,27 @@
 /** Vehicle detail options and empty form defaults. */
 
+/** Ownership / engagement mode when adding a vehicle. */
 export const OWNERSHIP_OPTIONS = [
-  { value: "OWN", label: "Own" },
-  { value: "DCO", label: "DCO" },
-  { value: "ATTACHED", label: "Attached" },
+  {
+    value: "DRIVER_OWNER",
+    label: "Driver/Owner",
+    help: "Owner and driver are the same person. Collect name, mobile, and account details.",
+  },
+  {
+    value: "OWNER",
+    label: "Owner",
+    help: "Collect separate driver and owner details. Account details are for the owner.",
+  },
+  {
+    value: "SUB_VENDOR",
+    label: "Sub-Vendor",
+    help: "Collect driver, owner, and sub-vendor details. Account details are for the sub-vendor.",
+  },
+  {
+    value: "CONTRACTUAL",
+    label: "Contractual",
+    help: "Collect driver, owner, and contractual details. Account details are for the contractual party.",
+  },
 ];
 
 export const FUEL_TYPE_OPTIONS = [
@@ -38,12 +56,21 @@ export const emptyVehicleDetails = () => ({
   ownership: "",
   owner_name: "",
   owner_phone: "",
+  driver_name: "",
+  driver_phone: "",
   fuel_type: "",
   seating_capacity: "",
   registration_date: "",
   manufacture_year: "",
   attach_date: "",
   sub_vendor: "",
+  sub_vendor_phone: "",
+  contractual_name: "",
+  contractual_phone: "",
+  account_holder_name: "",
+  account_number: "",
+  account_ifsc: "",
+  account_bank_name: "",
   engine_number: "",
   chassis_number: "",
   ac_type: "",
@@ -84,10 +111,24 @@ export function detailsFromVehicleRow(row = {}) {
 /** Payload fields for create/update API (null for empty strings). */
 export function detailsPayload(form) {
   const nullIfEmpty = (v) => (v === "" || v == null ? null : v);
+  const ownership = nullIfEmpty(form.ownership);
+  let ownerName = nullIfEmpty(form.owner_name);
+  let ownerPhone = nullIfEmpty(form.owner_phone);
+  let driverName = nullIfEmpty(form.driver_name);
+  let driverPhone = nullIfEmpty(form.driver_phone);
+
+  // Driver/Owner: same person
+  if (ownership === "DRIVER_OWNER") {
+    driverName = ownerName;
+    driverPhone = ownerPhone;
+  }
+
   return {
-    ownership: nullIfEmpty(form.ownership),
-    owner_name: nullIfEmpty(form.owner_name),
-    owner_phone: nullIfEmpty(form.owner_phone),
+    ownership,
+    owner_name: ownerName,
+    owner_phone: ownerPhone,
+    driver_name: driverName,
+    driver_phone: driverPhone,
     fuel_type: nullIfEmpty(form.fuel_type),
     seating_capacity:
       form.seating_capacity === "" || form.seating_capacity == null
@@ -100,6 +141,13 @@ export function detailsPayload(form) {
         : Number(form.manufacture_year),
     attach_date: nullIfEmpty(form.attach_date),
     sub_vendor: nullIfEmpty(form.sub_vendor),
+    sub_vendor_phone: nullIfEmpty(form.sub_vendor_phone),
+    contractual_name: nullIfEmpty(form.contractual_name),
+    contractual_phone: nullIfEmpty(form.contractual_phone),
+    account_holder_name: nullIfEmpty(form.account_holder_name),
+    account_number: nullIfEmpty(form.account_number),
+    account_ifsc: nullIfEmpty(form.account_ifsc),
+    account_bank_name: nullIfEmpty(form.account_bank_name),
     engine_number: nullIfEmpty(form.engine_number),
     chassis_number: nullIfEmpty(form.chassis_number),
     ac_type: nullIfEmpty(form.ac_type),
@@ -124,5 +172,15 @@ export function fuelLabel(code) {
 }
 
 export function ownershipLabel(code) {
+  const legacy = { OWN: "Owner", DCO: "Sub-Vendor", ATTACHED: "Sub-Vendor" };
+  if (legacy[code]) return legacy[code];
   return OWNERSHIP_OPTIONS.find((o) => o.value === code)?.label || code || "—";
+}
+
+export function accountSectionTitle(ownership) {
+  if (ownership === "DRIVER_OWNER") return "Driver/Owner account details";
+  if (ownership === "OWNER") return "Owner account details";
+  if (ownership === "SUB_VENDOR") return "Sub-vendor account details";
+  if (ownership === "CONTRACTUAL") return "Contractual account details";
+  return "Account details";
 }

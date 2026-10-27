@@ -4,16 +4,18 @@ import {
   GPS_OPTIONS,
   OWNERSHIP_OPTIONS,
   SEATING_OPTIONS,
+  accountSectionTitle,
 } from "../constants/vehicleFields";
 
 const inputCls = "w-full border rounded-lg px-3 py-2 bg-white";
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
-function Labeled({ label, children }) {
+function Labeled({ label, children, hint }) {
   return (
     <label className="block">
       <span className={labelCls}>{label}</span>
       {children}
+      {hint ? <span className="mt-1 block text-[11px] text-slate-500">{hint}</span> : null}
     </label>
   );
 }
@@ -22,6 +24,49 @@ function typeLabel(t) {
   const pax = t.passenger_count != null && t.passenger_count !== "" ? Number(t.passenger_count) : null;
   if (pax != null && Number.isFinite(pax)) return `${t.name} (${pax} pax)`;
   return t.name;
+}
+
+function AccountFields({ value, set, title }) {
+  return (
+    <div>
+      <div className="text-sm font-bold text-btt-navy mb-2">{title}</div>
+      <div className="grid md:grid-cols-2 gap-3">
+        <Labeled label="Account holder name">
+          <input
+            className={inputCls}
+            value={value.account_holder_name || ""}
+            onChange={(e) => set({ account_holder_name: e.target.value })}
+            placeholder="Name as in bank account"
+          />
+        </Labeled>
+        <Labeled label="Account number">
+          <input
+            className={`${inputCls} font-mono`}
+            value={value.account_number || ""}
+            onChange={(e) => set({ account_number: e.target.value.replace(/\s/g, "") })}
+            placeholder="Account number"
+            inputMode="numeric"
+          />
+        </Labeled>
+        <Labeled label="IFSC">
+          <input
+            className={`${inputCls} font-mono uppercase`}
+            value={value.account_ifsc || ""}
+            onChange={(e) => set({ account_ifsc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11) })}
+            placeholder="e.g. HDFC0001234"
+          />
+        </Labeled>
+        <Labeled label="Bank name">
+          <input
+            className={inputCls}
+            value={value.account_bank_name || ""}
+            onChange={(e) => set({ account_bank_name: e.target.value })}
+            placeholder="Bank name"
+          />
+        </Labeled>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -41,6 +86,14 @@ export default function VehicleInfoFields({
   const set = (patch) => onChange({ ...value, ...patch });
   const grid = dense ? "grid sm:grid-cols-2 gap-3" : "grid md:grid-cols-3 gap-3";
   const gpsOn = value.gps_installed === true || value.gps_installed === 1 || value.gps_installed === "1";
+  const ownership = value.ownership || "";
+  const ownershipMeta = OWNERSHIP_OPTIONS.find((o) => o.value === ownership);
+  const isDriverOwner = ownership === "DRIVER_OWNER";
+  const showSeparateDriver = ownership === "OWNER" || ownership === "SUB_VENDOR" || ownership === "CONTRACTUAL";
+  const showOwner = Boolean(ownership);
+  const showSubVendor = ownership === "SUB_VENDOR";
+  const showContractual = ownership === "CONTRACTUAL";
+  const showAccount = Boolean(ownership);
 
   function onVehicleTypeChange(rawId) {
     const patch = { vehicle_type_id: rawId };
@@ -51,6 +104,30 @@ export default function VehicleInfoFields({
         patch.seating_capacity = String(pax);
       }
     }
+    set(patch);
+  }
+
+  function onOwnershipChange(next) {
+    const patch = { ownership: next };
+    if (next === "DRIVER_OWNER") {
+      patch.driver_name = value.owner_name || "";
+      patch.driver_phone = value.owner_phone || "";
+    }
+    if (next !== "SUB_VENDOR") {
+      // keep existing values but UI hides them
+    }
+    set(patch);
+  }
+
+  function onOwnerNameChange(name) {
+    const patch = { owner_name: name };
+    if (isDriverOwner) patch.driver_name = name;
+    set(patch);
+  }
+
+  function onOwnerPhoneChange(phone) {
+    const patch = { owner_phone: phone };
+    if (isDriverOwner) patch.driver_phone = phone;
     set(patch);
   }
 
@@ -81,13 +158,14 @@ export default function VehicleInfoFields({
       <div>
         <div className="text-sm font-bold text-btt-navy mb-2">Vehicle information</div>
         <div className={grid}>
-          <Labeled label="Ownership">
+          <Labeled label="Ownership type *" hint={ownershipMeta?.help}>
             <select
               className={inputCls}
-              value={value.ownership || ""}
-              onChange={(e) => set({ ownership: e.target.value })}
+              value={ownership}
+              onChange={(e) => onOwnershipChange(e.target.value)}
+              required
             >
-              <option value="">Select</option>
+              <option value="">Select ownership</option>
               {OWNERSHIP_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -172,6 +250,14 @@ export default function VehicleInfoFields({
               ))}
             </select>
           </Labeled>
+          <Labeled label="Attach date">
+            <input
+              className={inputCls}
+              type="date"
+              value={value.attach_date || ""}
+              onChange={(e) => set({ attach_date: e.target.value })}
+            />
+          </Labeled>
           {showStatus ? (
             <Labeled label="Status (active)">
               <select
@@ -187,44 +273,114 @@ export default function VehicleInfoFields({
         </div>
       </div>
 
-      <div>
-        <div className="text-sm font-bold text-btt-navy mb-2">Owner & attachment</div>
-        <div className={grid}>
-          <Labeled label="Owner name">
-            <input
-              className={inputCls}
-              value={value.owner_name || ""}
-              onChange={(e) => set({ owner_name: e.target.value })}
-              placeholder="Owner name"
-            />
-          </Labeled>
-          <Labeled label="Owner mobile">
-            <input
-              className={inputCls}
-              value={value.owner_phone || ""}
-              onChange={(e) => set({ owner_phone: e.target.value })}
-              placeholder="Mobile"
-              inputMode="numeric"
-            />
-          </Labeled>
-          <Labeled label="Attach date">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.attach_date || ""}
-              onChange={(e) => set({ attach_date: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="Sub vendor">
-            <input
-              className={inputCls}
-              value={value.sub_vendor || ""}
-              onChange={(e) => set({ sub_vendor: e.target.value })}
-              placeholder="NA / vendor name"
-            />
-          </Labeled>
+      {showSeparateDriver ? (
+        <div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Driver details</div>
+          <div className={grid}>
+            <Labeled label="Driver full name *">
+              <input
+                className={inputCls}
+                value={value.driver_name || ""}
+                onChange={(e) => set({ driver_name: e.target.value })}
+                placeholder="Driver full name"
+              />
+            </Labeled>
+            <Labeled label="Driver mobile *">
+              <input
+                className={inputCls}
+                value={value.driver_phone || ""}
+                onChange={(e) => set({ driver_phone: e.target.value })}
+                placeholder="Mobile"
+                inputMode="numeric"
+              />
+            </Labeled>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {showOwner ? (
+        <div>
+          <div className="text-sm font-bold text-btt-navy mb-2">
+            {isDriverOwner ? "Driver / Owner details" : "Owner details"}
+          </div>
+          <div className={grid}>
+            <Labeled label={isDriverOwner ? "Full name *" : "Owner full name *"}>
+              <input
+                className={inputCls}
+                value={value.owner_name || ""}
+                onChange={(e) => onOwnerNameChange(e.target.value)}
+                placeholder="Full name"
+              />
+            </Labeled>
+            <Labeled label={isDriverOwner ? "Mobile number *" : "Owner mobile *"}>
+              <input
+                className={inputCls}
+                value={value.owner_phone || ""}
+                onChange={(e) => onOwnerPhoneChange(e.target.value)}
+                placeholder="Mobile"
+                inputMode="numeric"
+              />
+            </Labeled>
+            {isDriverOwner ? (
+              <p className="text-xs text-slate-500 md:col-span-1 self-end pb-2">
+                Owner and driver are the same person for this ownership type.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showSubVendor ? (
+        <div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Sub-vendor details</div>
+          <div className={grid}>
+            <Labeled label="Sub-vendor full name *">
+              <input
+                className={inputCls}
+                value={value.sub_vendor || ""}
+                onChange={(e) => set({ sub_vendor: e.target.value })}
+                placeholder="Sub-vendor name"
+              />
+            </Labeled>
+            <Labeled label="Sub-vendor mobile *">
+              <input
+                className={inputCls}
+                value={value.sub_vendor_phone || ""}
+                onChange={(e) => set({ sub_vendor_phone: e.target.value })}
+                placeholder="Mobile"
+                inputMode="numeric"
+              />
+            </Labeled>
+          </div>
+        </div>
+      ) : null}
+
+      {showContractual ? (
+        <div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Contractual details</div>
+          <div className={grid}>
+            <Labeled label="Contractual full name *">
+              <input
+                className={inputCls}
+                value={value.contractual_name || ""}
+                onChange={(e) => set({ contractual_name: e.target.value })}
+                placeholder="Contractual party name"
+              />
+            </Labeled>
+            <Labeled label="Contractual mobile *">
+              <input
+                className={inputCls}
+                value={value.contractual_phone || ""}
+                onChange={(e) => set({ contractual_phone: e.target.value })}
+                placeholder="Mobile"
+                inputMode="numeric"
+              />
+            </Labeled>
+          </div>
+        </div>
+      ) : null}
+
+      {showAccount ? <AccountFields value={value} set={set} title={accountSectionTitle(ownership)} /> : null}
 
       <div>
         <div className="text-sm font-bold text-btt-navy mb-2">Technical & GPS</div>

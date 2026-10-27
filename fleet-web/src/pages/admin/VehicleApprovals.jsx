@@ -3,6 +3,7 @@ import api from "../../api";
 import DonutChart from "../../components/DonutChart";
 import ListToolbar from "../../components/ListToolbar";
 import { DOC_STATUS_LABEL, VEHICLE_DOC_SECTIONS } from "../../constants/vehicleDocs";
+import { ownershipLabel } from "../../constants/vehicleFields";
 import { downloadExcel, excelStamp } from "../../utils/exportExcel";
 import { matchSearch } from "../../utils/listFilter";
 
@@ -272,15 +273,21 @@ export default function AdminVehicleApprovals() {
             </div>
             <div>
               <span className="text-slate-500">Ownership</span>
-              <div className="font-semibold">{selected.ownership || "—"}</div>
+              <div className="font-semibold">{ownershipLabel(selected.ownership)}</div>
             </div>
             <div>
               <span className="text-slate-500">Owner</span>
-              <div className="font-semibold">{selected.owner_name || "—"}</div>
+              <div className="font-semibold">
+                {selected.owner_name || "—"}
+                {selected.owner_phone ? ` · ${selected.owner_phone}` : ""}
+              </div>
             </div>
             <div>
-              <span className="text-slate-500">Phone</span>
-              <div className="font-semibold">{selected.owner_phone || "—"}</div>
+              <span className="text-slate-500">Driver</span>
+              <div className="font-semibold">
+                {selected.driver_name || "—"}
+                {selected.driver_phone ? ` · ${selected.driver_phone}` : ""}
+              </div>
             </div>
             <div>
               <span className="text-slate-500">Model / year</span>
@@ -314,8 +321,33 @@ export default function AdminVehicleApprovals() {
               <div className="font-semibold">{dateStr(selected.attach_date)}</div>
             </div>
             <div>
-              <span className="text-slate-500">Sub vendor</span>
-              <div className="font-semibold">{selected.sub_vendor || "—"}</div>
+              <span className="text-slate-500">Sub-vendor</span>
+              <div className="font-semibold">
+                {selected.sub_vendor || "—"}
+                {selected.sub_vendor_phone ? ` · ${selected.sub_vendor_phone}` : ""}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-500">Contractual</span>
+              <div className="font-semibold">
+                {selected.contractual_name || "—"}
+                {selected.contractual_phone ? ` · ${selected.contractual_phone}` : ""}
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <span className="text-slate-500">Account details</span>
+              <div className="font-semibold">
+                {selected.account_holder_name || selected.account_number
+                  ? [
+                      selected.account_holder_name,
+                      selected.account_number,
+                      selected.account_ifsc,
+                      selected.account_bank_name,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "—"}
+              </div>
             </div>
             <div>
               <span className="text-slate-500">GPS</span>

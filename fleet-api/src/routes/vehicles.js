@@ -91,10 +91,19 @@ async function resolveGpsVendor(body, existing = {}, gpsInstalled) {
 const VEHICLE_STRING_FIELDS = [
   "owner_name",
   "owner_phone",
+  "driver_name",
+  "driver_phone",
   "ownership",
   "make_model",
   "fuel_type",
   "sub_vendor",
+  "sub_vendor_phone",
+  "contractual_name",
+  "contractual_phone",
+  "account_holder_name",
+  "account_number",
+  "account_ifsc",
+  "account_bank_name",
   "engine_number",
   "chassis_number",
   "ac_type",
@@ -112,8 +121,10 @@ const VEHICLE_STRING_FIELDS = [
   "notes",
 ];
 
-const VEHICLE_INSERT_COLS = `owner_name, owner_phone, ownership, make_model, vehicle_type_id, fuel_type,
-  seating_capacity, registration_date, manufacture_year, attach_date, sub_vendor, engine_number, chassis_number, ac_type,
+const VEHICLE_INSERT_COLS = `owner_name, owner_phone, driver_name, driver_phone, ownership, make_model, vehicle_type_id, fuel_type,
+  seating_capacity, registration_date, manufacture_year, attach_date, sub_vendor, sub_vendor_phone,
+  contractual_name, contractual_phone, account_holder_name, account_number, account_ifsc, account_bank_name,
+  engine_number, chassis_number, ac_type,
   gps_installed, gps_imei, gps_vendor, gps_vendor_id,
   insurance_expiry, fitness_expiry, puc_expiry, tax_expiry, permit_expiry, form_42_47_expiry, form_49_expiry`;
 
@@ -121,6 +132,8 @@ function vehicleFieldValues(f, typeRes) {
   return [
     f.owner_name,
     f.owner_phone,
+    f.driver_name,
+    f.driver_phone,
     f.ownership,
     typeRes.make_model,
     typeRes.vehicle_type_id,
@@ -130,6 +143,13 @@ function vehicleFieldValues(f, typeRes) {
     f.manufacture_year,
     f.attach_date,
     f.sub_vendor,
+    f.sub_vendor_phone,
+    f.contractual_name,
+    f.contractual_phone,
+    f.account_holder_name,
+    f.account_number,
+    f.account_ifsc,
+    f.account_bank_name,
     f.engine_number,
     f.chassis_number,
     f.ac_type,
@@ -147,10 +167,21 @@ function vehicleFieldValues(f, typeRes) {
   ];
 }
 
+function normalizeOwnershipMode(raw) {
+  const v = String(raw || "").trim().toUpperCase();
+  if (!v) return null;
+  if (v === "OWN") return "OWNER";
+  if (v === "DCO" || v === "ATTACHED") return "SUB_VENDOR";
+  if (["DRIVER_OWNER", "OWNER", "SUB_VENDOR", "CONTRACTUAL"].includes(v)) return v;
+  return v;
+}
+
 function pickVehicleFields(body, existing = {}) {
   const out = {
     owner_name: existing.owner_name ?? null,
     owner_phone: existing.owner_phone ?? null,
+    driver_name: existing.driver_name ?? null,
+    driver_phone: existing.driver_phone ?? null,
     ownership: existing.ownership ?? null,
     make_model: existing.make_model ?? null,
     fuel_type: existing.fuel_type ?? null,
@@ -159,6 +190,13 @@ function pickVehicleFields(body, existing = {}) {
     manufacture_year: existing.manufacture_year ?? null,
     attach_date: existing.attach_date ?? null,
     sub_vendor: existing.sub_vendor ?? null,
+    sub_vendor_phone: existing.sub_vendor_phone ?? null,
+    contractual_name: existing.contractual_name ?? null,
+    contractual_phone: existing.contractual_phone ?? null,
+    account_holder_name: existing.account_holder_name ?? null,
+    account_number: existing.account_number ?? null,
+    account_ifsc: existing.account_ifsc ?? null,
+    account_bank_name: existing.account_bank_name ?? null,
     engine_number: existing.engine_number ?? null,
     chassis_number: existing.chassis_number ?? null,
     ac_type: existing.ac_type ?? null,
@@ -182,6 +220,14 @@ function pickVehicleFields(body, existing = {}) {
       out[k] = v === "" || v == null ? null : String(v);
     }
   }
+  if (Object.prototype.hasOwnProperty.call(body, "ownership") || out.ownership) {
+    out.ownership = normalizeOwnershipMode(out.ownership);
+  }
+  if (out.ownership === "DRIVER_OWNER") {
+    out.driver_name = out.owner_name;
+    out.driver_phone = out.owner_phone;
+  }
+  if (out.account_ifsc) out.account_ifsc = String(out.account_ifsc).toUpperCase();
   if (Object.prototype.hasOwnProperty.call(body, "manufacture_year")) {
     const y = body.manufacture_year;
     if (y === "" || y == null) out.manufacture_year = null;
@@ -342,7 +388,7 @@ admin.post("/", async (req, res) => {
     `INSERT INTO vehicles (
       client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
     [cid, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes]
   );
   const vid = result.insertId;
@@ -389,8 +435,9 @@ admin.patch("/:id", async (req, res) => {
   if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
   await execute(
     `UPDATE vehicles SET client_id=?, registration_number=?,
-      owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?,
+      owner_name=?, owner_phone=?, driver_name=?, driver_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
+      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?, sub_vendor_phone=?,
+      contractual_name=?, contractual_phone=?, account_holder_name=?, account_number=?, account_ifsc=?, account_bank_name=?,
       engine_number=?, chassis_number=?, ac_type=?,
       gps_installed=?, gps_imei=?, gps_vendor=?, gps_vendor_id=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
@@ -554,7 +601,7 @@ sm.post("/", async (req, res) => {
     `INSERT INTO vehicles (
       client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, submitted_by_site_manager_id, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
     [smRow.client_id, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), smRow.id, f.notes]
   );
   res.status(201).json(
@@ -603,8 +650,9 @@ sm.patch("/:id", async (req, res) => {
   if (slaErr) return res.status(slaErr.status).json({ error: slaErr.error });
   await execute(
     `UPDATE vehicles SET registration_number=?,
-      owner_name=?, owner_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?,
+      owner_name=?, owner_phone=?, driver_name=?, driver_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
+      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?, sub_vendor_phone=?,
+      contractual_name=?, contractual_phone=?, account_holder_name=?, account_number=?, account_ifsc=?, account_bank_name=?,
       engine_number=?, chassis_number=?, ac_type=?,
       gps_installed=?, gps_imei=?, gps_vendor=?, gps_vendor_id=?,
       insurance_expiry=?, fitness_expiry=?, puc_expiry=?, tax_expiry=?, permit_expiry=?,
