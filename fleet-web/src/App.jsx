@@ -16,10 +16,13 @@ import AdminPayments from "./pages/admin/Payments";
 import AdminVehicleApprovals from "./pages/admin/VehicleApprovals";
 import AdminVehicleTypes from "./pages/admin/VehicleTypes";
 import AdminGpsVendors from "./pages/admin/GpsVendors";
+import AdminDrivers from "./pages/admin/Drivers";
+import AdminExpiryReminders from "./pages/admin/ExpiryReminders";
 import SmDashboard from "./pages/sm/SmDashboard";
 import IssueIndent from "./pages/sm/IssueIndent";
 import MyIndents from "./pages/sm/MyIndents";
 import SmVehicles from "./pages/sm/Vehicles";
+import SmDrivers from "./pages/sm/Drivers";
 import AmDashboard from "./pages/am/AmDashboard";
 import AmSites from "./pages/am/AmSites";
 import AmReports from "./pages/am/AmReports";
@@ -52,6 +55,8 @@ export default function App() {
         <Route path="vehicles" element={<AdminVehicles />} />
         <Route path="vehicle-types" element={<AdminVehicleTypes />} />
         <Route path="gps-vendors" element={<AdminGpsVendors />} />
+        <Route path="drivers" element={<AdminDrivers />} />
+        <Route path="expiry-reminders" element={<AdminExpiryReminders />} />
         <Route path="vehicle-approvals" element={<AdminVehicleApprovals />} />
         <Route path="indents" element={<AdminIndents />} />
         <Route path="indent-series" element={<AdminIndentSeries />} />
@@ -68,6 +73,7 @@ export default function App() {
       >
         <Route index element={<SmDashboard />} />
         <Route path="vehicles" element={<SmVehicles />} />
+        <Route path="drivers" element={<SmDrivers />} />
         <Route path="issue-indent" element={<IssueIndent />} />
         <Route path="my-indents" element={<MyIndents />} />
       </Route>

@@ -19,12 +19,15 @@ import vehicleTypes from "./routes/vehicleTypes.js";
 import gpsVendors from "./routes/gpsVendors.js";
 import smDashboard from "./routes/smDashboard.js";
 import amSites from "./routes/amSites.js";
+import { driversAdmin, driversSm } from "./routes/drivers.js";
+import expiryReminders from "./routes/expiryReminders.js";
+import { startExpiryReminderScheduler } from "./services/expiryReminders.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
 
-for (const sub of ["indents", "fuel", "vehicles"]) {
+for (const sub of ["indents", "fuel", "vehicles", "drivers"]) {
   fs.mkdirSync(path.join(uploadRoot, sub), { recursive: true });
 }
 
@@ -57,6 +60,9 @@ app.use("/api/admin/notifications", notifications);
 app.use("/api/vehicle-types", vehicleTypes);
 app.use("/api/gps-vendors", gpsVendors);
 app.use("/api/sm/dashboard", smDashboard);
+app.use("/api/admin/drivers", driversAdmin);
+app.use("/api/sm/drivers", driversSm);
+app.use("/api/admin/expiry-reminders", expiryReminders);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -65,4 +71,5 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`BTT Fleet API http://127.0.0.1:${PORT}`);
+  startExpiryReminderScheduler();
 });

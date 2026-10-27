@@ -215,6 +215,90 @@ export async function sendPaymentLinkWhatsApp(mobile, url, meta = {}) {
   return { ok: false, error: "unknown_provider" };
 }
 
+/**
+ * Document expiry reminder via WhatsApp.
+ * Template body variables (Interakt/Meta) default to 4 text params:
+ *   {{1}} recipient name
+ *   {{2}} document label (e.g. Insurance)
+ *   {{3}} entity label (vehicle reg / driver name)
+ *   {{4}} timing text (e.g. "in 15 days" / "tomorrow (1 day)")
+ * Override template with INTERAKT_DOC_REMINDER_TEMPLATE_NAME / META_DOC_REMINDER_TEMPLATE_NAME.
+ */
+export async function sendDocumentReminderWhatsApp(mobile, payload = {}, meta = {}) {
+  const provider = (process.env.WHATSAPP_PROVIDER || "stub").toLowerCase();
+  const to = normalizeWhatsAppDigits(mobile);
+  if (!to) {
+    console.warn("[WhatsApp] invalid mobile for doc reminder:", mobile);
+    return { ok: false, error: "invalid_mobile" };
+  }
+
+  const name = String(payload.recipientName || "Team").trim() || "Team";
+  const docLabel = String(payload.docLabel || "document").trim();
+  const entityLabel = String(payload.entityLabel || "").trim() || "record";
+  const timing = String(payload.timingText || "").trim() || "soon";
+  const bodyValues = [name, docLabel, entityLabel, timing];
+
+  if (provider === "stub") {
+    console.log(`[WhatsApp stub] DOC REMINDER to=${to}`, bodyValues, meta);
+    return { ok: true, channel: "stub" };
+  }
+  if (provider === "interakt") {
+    const tpl = (
+      process.env.INTERAKT_DOC_REMINDER_TEMPLATE_NAME ||
+      process.env.INTERAKT_TEMPLATE_NAME ||
+      ""
+    ).trim();
+    const result = await sendInteraktTemplate(
+      to,
+      tpl,
+      bodyValues,
+      meta?.callbackData || "doc_expiry_reminder"
+    );
+    return { ...result, channel: "whatsapp" };
+  }
+  if (provider === "meta") {
+    const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+    const token = process.env.META_WHATSAPP_ACCESS_TOKEN;
+    const tpl = (process.env.META_DOC_REMINDER_TEMPLATE_NAME || process.env.META_WHATSAPP_TEMPLATE_NAME || "").trim();
+    if (!phoneNumberId || !token || !tpl) return { ok: false, error: "meta_not_configured", channel: "whatsapp" };
+    const lang = process.env.META_WHATSAPP_TEMPLATE_LANG || "en";
+    const ver = process.env.META_GRAPH_API_VERSION || "v21.0";
+    try {
+      const res = await fetch(`https://graph.facebook.com/${ver}/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to,
+          type: "template",
+          template: {
+            name: tpl,
+            language: { code: lang },
+            components: [
+              {
+                type: "body",
+                parameters: bodyValues.map((text) => ({ type: "text", text })),
+              },
+            ],
+          },
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: json?.error?.message || `meta_http_${res.status}`,
+          channel: "whatsapp",
+        };
+      }
+      return { ok: true, detail: json, channel: "whatsapp" };
+    } catch (e) {
+      return { ok: false, error: "meta_network", channel: "whatsapp" };
+    }
+  }
+  return { ok: false, error: "unknown_provider" };
+}
+
 /** Send Authentication OTP via WhatsApp template ({{1}} = OTP). */
 export async function sendAuthOtpWhatsApp(mobile, otp, meta = {}) {
   const provider = (process.env.WHATSAPP_PROVIDER || "stub").toLowerCase();
