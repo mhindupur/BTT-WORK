@@ -6,10 +6,15 @@ export default function AdminFuel() {
   const [lines, setLines] = useState([]);
   const [selected, setSelected] = useState(null);
   const [msg, setMsg] = useState("");
+  const [mismatchAlerts, setMismatchAlerts] = useState([]);
 
   async function loadUploads() {
-    const { data } = await api.get("/admin/fuel/uploads");
-    setUploads(data);
+    const [up, dash] = await Promise.all([
+      api.get("/admin/fuel/uploads"),
+      api.get("/admin/dashboard/summary").catch(() => ({ data: null })),
+    ]);
+    setUploads(up.data);
+    setMismatchAlerts(dash.data?.mismatch_alerts || []);
   }
 
   useEffect(() => {
@@ -43,10 +48,27 @@ export default function AdminFuel() {
       <h1 className="text-2xl font-bold text-btt-navy mb-4">Fuel reconciliation</h1>
       <p className="text-sm text-slate-600 mb-4">
         Upload fuel pump Excel (.xlsx). Include columns: vehicle / registration, amount / filled_amount;
-        optional serial_number to match indents. Mismatches appear on the dashboard.
+        optional serial_number to match indents. Mismatch alerts are listed below.
       </p>
       <input type="file" accept=".xlsx,.xls" onChange={onFile} className="mb-4" />
       {msg && <p className="text-sm mb-4 text-btt-accent">{msg}</p>}
+
+      <div className="bg-white rounded-xl border border-amber-200 p-4 mb-6 shadow-sm">
+        <h2 className="font-semibold text-amber-900 mb-2">Mismatch alerts</h2>
+        <ul className="text-sm space-y-2">
+          {mismatchAlerts.length ? (
+            mismatchAlerts.map((m) => (
+              <li key={m.id} className="p-2 bg-amber-50 rounded-lg border border-amber-100">
+                <span className="font-mono text-xs mr-2">{m.vehicle_registration || ""}</span>
+                {m.alert_message}
+              </li>
+            ))
+          ) : (
+            <li className="text-slate-500">No recent mismatches.</li>
+          )}
+        </ul>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <h2 className="font-semibold mb-2">Uploads</h2>

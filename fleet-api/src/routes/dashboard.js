@@ -5,8 +5,22 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 const r = Router();
 r.use(requireAuth, requireAdmin);
 
+const FUEL_LABELS = {
+  DIE: "Diesel",
+  PET: "Petrol",
+  CNG: "CNG",
+  ELE: "Electric",
+  HYB: "Hybrid",
+};
+
 function n(row, key = "c") {
   return Number(row?.[key] || 0);
+}
+
+function fuelLabel(code) {
+  const raw = String(code || "").trim();
+  if (!raw || raw === "Unknown") return "Unknown";
+  return FUEL_LABELS[raw] || raw;
 }
 
 async function expiryBucket(column) {
@@ -46,6 +60,9 @@ r.get("/summary", async (_req, res) => {
     "SELECT COUNT(*) AS c FROM fuel_recon_lines WHERE alert_message IS NOT NULL"
   );
   const siteManagers = await queryOne("SELECT COUNT(*) AS c FROM site_managers");
+  const gpsDevices = await queryOne(
+    "SELECT COUNT(*) AS c FROM vehicles WHERE gps_installed = 1"
+  );
 
   const byFuel = await query(
     `SELECT COALESCE(NULLIF(TRIM(fuel_type), ''), 'Unknown') AS label, COUNT(*) AS value
@@ -68,6 +85,37 @@ r.get("/summary", async (_req, res) => {
      GROUP BY c.id, c.name
      ORDER BY value DESC
      LIMIT 12`
+  );
+  const byVendorType = await query(
+    `SELECT
+       CASE
+         WHEN vendor_type = 'SINGLE' THEN 'Single vendor'
+         WHEN vendor_type = 'MULTIPLE' THEN 'Multiple vendors'
+         ELSE 'Not set'
+       END AS label,
+       COUNT(*) AS value
+     FROM clients
+     GROUP BY
+       CASE
+         WHEN vendor_type = 'SINGLE' THEN 'Single vendor'
+         WHEN vendor_type = 'MULTIPLE' THEN 'Multiple vendors'
+         ELSE 'Not set'
+       END
+     ORDER BY value DESC`
+  );
+  const byGpsVendor = await query(
+    `SELECT
+       COALESCE(
+         NULLIF(TRIM(gv.name), ''),
+         NULLIF(TRIM(v.gps_vendor), ''),
+         'Unknown vendor'
+       ) AS label,
+       COUNT(*) AS value
+     FROM vehicles v
+     LEFT JOIN gps_vendors gv ON gv.id = v.gps_vendor_id
+     WHERE v.gps_installed = 1
+     GROUP BY label
+     ORDER BY value DESC`
   );
 
   const insurance = await expiryBucket("insurance_expiry");
@@ -112,6 +160,7 @@ r.get("/summary", async (_req, res) => {
       draft: n(draft),
       rejected: n(rejected),
       site_managers: n(siteManagers),
+      gps_devices: n(gpsDevices),
       active_indents_pending: n(indentsPending),
       fuel_recon_alerts: n(reconAlerts),
       insurance_expired: insurance.expired,
@@ -121,10 +170,21 @@ r.get("/summary", async (_req, res) => {
       permit_expired: permit.expired,
     },
     charts: {
-      by_fuel: byFuel.map((r) => ({ label: r.label, value: n(r, "value") })),
-      by_model: byModel.map((r) => ({ label: r.label, value: n(r, "value") })),
-      by_approval: byApproval.map((r) => ({ label: r.label, value: n(r, "value") })),
-      by_client: byClient.map((r) => ({ label: r.label, value: n(r, "value") })),
+      by_fuel: byFuel.map((row) => ({ label: fuelLabel(row.label), value: n(row, "value") })),
+      by_model: byModel.map((row) => ({ label: row.label, value: n(row, "value") })),
+      by_approval: byApproval.map((row) => ({ label: row.label, value: n(row, "value") })),
+      by_client: byClient.map((row) => ({ label: row.label, value: n(row, "value") })),
+      by_vendor_type: byVendorType.map((row) => ({
+        label: row.label,
+        value: n(row, "value"),
+        color:
+          row.label === "Single vendor"
+            ? "#2563eb"
+            : row.label === "Multiple vendors"
+              ? "#ea580c"
+              : "#94a3b8",
+      })),
+      by_gps_vendor: byGpsVendor.map((row) => ({ label: row.label, value: n(row, "value") })),
     },
     expiry: {
       insurance,

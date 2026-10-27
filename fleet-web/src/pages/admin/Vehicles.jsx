@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import DonutChart from "../../components/DonutChart";
 import ListToolbar from "../../components/ListToolbar";
 import VehicleInfoFields from "../../components/VehicleInfoFields";
 import { APPROVAL_STATUS_LABEL } from "../../constants/vehicleDocs";
@@ -40,21 +41,24 @@ export default function AdminVehicles() {
   const [editErr, setEditErr] = useState("");
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [gpsVendors, setGpsVendors] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [siteFilter, setSiteFilter] = useState("");
 
   async function load() {
-    const [v, c, vt, gv] = await Promise.all([
+    const [v, c, vt, gv, dash] = await Promise.all([
       api.get("/admin/vehicles"),
       api.get("/clients"),
       api.get("/vehicle-types"),
       api.get("/gps-vendors"),
+      api.get("/admin/dashboard/summary").catch(() => ({ data: null })),
     ]);
     setRows(v.data);
     setClients(c.data);
     setVehicleTypes(vt.data);
     setGpsVendors(gv.data);
+    setAnalytics(dash.data);
   }
 
   useEffect(() => {
@@ -232,6 +236,37 @@ export default function AdminVehicles() {
           {showAdd ? "Hide add form" : "Add vehicle"}
         </button>
       </div>
+
+      {analytics ? (
+        <section className="mb-6 space-y-3">
+          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+            Compliance &amp; site distribution
+          </h2>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <DonutChart
+              title="Vehicles by site"
+              segments={analytics.charts?.by_client || []}
+            />
+            {[
+              ["Insurance expiry", analytics.expiry?.insurance],
+              ["Fitness expiry", analytics.expiry?.fitness],
+              ["Road tax expiry", analytics.expiry?.road_tax],
+              ["PUC expiry", analytics.expiry?.puc],
+              ["Permit expiry", analytics.expiry?.permit],
+            ].map(([title, bucket]) => (
+              <DonutChart
+                key={title}
+                title={title}
+                segments={[
+                  { label: "Valid", value: bucket?.valid || 0, color: "#16a34a" },
+                  { label: "Expired", value: bucket?.expired || 0, color: "#ea580c" },
+                  { label: "Date missing", value: bucket?.missing || 0, color: "#94a3b8" },
+                ]}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {showAdd && (
         <form

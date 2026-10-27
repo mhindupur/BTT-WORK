@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import DonutChart from "../../components/DonutChart";
 import ListToolbar from "../../components/ListToolbar";
 import { DOC_STATUS_LABEL, VEHICLE_DOC_SECTIONS } from "../../constants/vehicleDocs";
 import { downloadExcel, excelStamp } from "../../utils/exportExcel";
 import { matchSearch } from "../../utils/listFilter";
+
+const APPROVAL_LABEL = {
+  approved: "Approved",
+  pending_review: "Pending review",
+  draft: "Draft",
+  rejected: "Rejected",
+};
 
 function dateStr(v) {
   if (!v) return "—";
@@ -20,14 +28,29 @@ export default function AdminVehicleApprovals() {
   const [msg, setMsg] = useState("");
   const [docReject, setDocReject] = useState(null); // { id, note }
   const [search, setSearch] = useState("");
+  const [approvalChart, setApprovalChart] = useState([]);
 
   async function load() {
-    const [pending, notes] = await Promise.all([
+    const [pending, notes, dash] = await Promise.all([
       api.get("/admin/vehicles/pending-review"),
       api.get("/admin/notifications", { params: { unread: 1 } }),
+      api.get("/admin/dashboard/summary").catch(() => ({ data: null })),
     ]);
     setRows(pending.data);
     setNotifications(notes.data);
+    const segs = (dash.data?.charts?.by_approval || []).map((s) => ({
+      ...s,
+      label: APPROVAL_LABEL[s.label] || s.label,
+      color:
+        s.label === "approved"
+          ? "#16a34a"
+          : s.label === "pending_review"
+            ? "#d97706"
+            : s.label === "rejected"
+              ? "#dc2626"
+              : "#64748b",
+    }));
+    setApprovalChart(segs);
   }
   async function loadDocs(id) {
     if (!id) return setDocs([]);
@@ -156,6 +179,12 @@ export default function AdminVehicleApprovals() {
       </div>
       {err && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">{err}</div>}
       {msg && <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
+
+      {approvalChart.length ? (
+        <div className="max-w-sm">
+          <DonutChart title="Fleet approval status" segments={approvalChart} />
+        </div>
+      ) : null}
 
       {!!notifications.length && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">

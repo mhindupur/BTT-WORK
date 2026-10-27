@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
+import DonutChart from "../../components/DonutChart";
 import ListToolbar from "../../components/ListToolbar";
 import { downloadExcel, excelStamp } from "../../utils/exportExcel";
 import { matchSearch, uniqueOptions } from "../../utils/listFilter";
@@ -8,10 +9,26 @@ export default function AdminIndents() {
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [opsChart, setOpsChart] = useState([]);
 
   async function load() {
-    const { data } = await api.get("/admin/indents");
-    setRows(data);
+    const [indents, dash] = await Promise.all([
+      api.get("/admin/indents"),
+      api.get("/admin/dashboard/summary").catch(() => ({ data: null })),
+    ]);
+    setRows(indents.data);
+    const t = dash.data?.totals;
+    if (t) {
+      setOpsChart([
+        { label: "Pending indents", value: t.active_indents_pending || 0, color: "#d97706" },
+        { label: "Fuel recon alerts", value: t.fuel_recon_alerts || 0, color: "#dc2626" },
+        {
+          label: "Active approved fleet",
+          value: Math.max(0, (t.active_approved || 0) - (t.active_indents_pending || 0)),
+          color: "#16a34a",
+        },
+      ]);
+    }
   }
 
   useEffect(() => {
@@ -63,6 +80,11 @@ export default function AdminIndents() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-btt-navy mb-4">Indents</h1>
+      {opsChart.length ? (
+        <div className="max-w-sm mb-4">
+          <DonutChart title="Pending indents vs alerts" segments={opsChart} />
+        </div>
+      ) : null}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <ListToolbar
           title="All indents"
