@@ -153,50 +153,20 @@ export default function VehicleInfoFields({
     });
   }
 
+  // Ownership options sit under this header (per layout), above name/mobile fields.
+  const partySectionTitle =
+    !ownership || isDriverOwner
+      ? "Driver / Owner details"
+      : ownership === "SUB_VENDOR"
+        ? "Sub-vendor details"
+        : ownership === "CONTRACTUAL"
+          ? "Contractual details"
+          : "Ownership";
+
   return (
     <div className="space-y-4">
       <div>
         <div className="text-sm font-bold text-btt-navy mb-2">Vehicle information</div>
-        <div className="mb-4">
-          <div className={labelCls}>Ownership type *</div>
-          <div
-            className="grid grid-cols-2 lg:grid-cols-4 gap-2"
-            role="radiogroup"
-            aria-label="Ownership type"
-          >
-            {OWNERSHIP_OPTIONS.map((o) => {
-              const selected = ownership === o.value;
-              return (
-                <label
-                  key={o.value}
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer transition select-none ${
-                    selected
-                      ? "border-btt-green bg-btt-green/10 ring-1 ring-btt-green text-btt-navy"
-                      : "border-slate-200 bg-white hover:border-btt-accent/50 text-slate-700"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="vehicle-ownership"
-                    className="h-4 w-4 accent-btt-green shrink-0"
-                    value={o.value}
-                    checked={selected}
-                    onChange={() => onOwnershipChange(o.value)}
-                    required
-                  />
-                  <span className="text-sm font-semibold leading-tight">{o.label}</span>
-                </label>
-              );
-            })}
-          </div>
-          {ownershipMeta?.help ? (
-            <p className="mt-2 text-[11px] text-slate-500">{ownershipMeta.help}</p>
-          ) : (
-            <p className="mt-2 text-[11px] text-slate-500">
-              Select one ownership type. Matching driver / owner / vendor fields appear below.
-            </p>
-          )}
-        </div>
         <div className={grid}>
           {showVehicleType ? (
             <Labeled label="Model / type">
@@ -298,6 +268,75 @@ export default function VehicleInfoFields({
         </div>
       </div>
 
+      <div>
+        <div className="text-sm font-bold text-btt-navy mb-2">{partySectionTitle}</div>
+        <div className="mb-3">
+          <div className={labelCls}>Ownership type *</div>
+          <div
+            className="grid grid-cols-2 lg:grid-cols-4 gap-2"
+            role="radiogroup"
+            aria-label="Ownership type"
+          >
+            {OWNERSHIP_OPTIONS.map((o) => {
+              const selected = ownership === o.value;
+              return (
+                <label
+                  key={o.value}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer transition select-none ${
+                    selected
+                      ? "border-btt-green bg-btt-green/10 ring-1 ring-btt-green text-btt-navy"
+                      : "border-slate-200 bg-white hover:border-btt-accent/50 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="vehicle-ownership"
+                    className="h-4 w-4 accent-btt-green shrink-0"
+                    value={o.value}
+                    checked={selected}
+                    onChange={() => onOwnershipChange(o.value)}
+                    required
+                  />
+                  <span className="text-sm font-semibold leading-tight">{o.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {ownershipMeta?.help ? (
+            <p className="mt-2 text-[11px] text-slate-500">{ownershipMeta.help}</p>
+          ) : (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Select one ownership type. Matching name, mobile, and account fields appear below.
+            </p>
+          )}
+        </div>
+
+        {isDriverOwner ? (
+          <div className={grid}>
+            <Labeled label="Full name *">
+              <input
+                className={inputCls}
+                value={value.owner_name || ""}
+                onChange={(e) => onOwnerNameChange(e.target.value)}
+                placeholder="Full name"
+              />
+            </Labeled>
+            <Labeled label="Mobile number *">
+              <input
+                className={inputCls}
+                value={value.owner_phone || ""}
+                onChange={(e) => onOwnerPhoneChange(e.target.value)}
+                placeholder="Mobile"
+                inputMode="numeric"
+              />
+            </Labeled>
+            <p className="text-xs text-slate-500 md:col-span-1 self-end pb-2">
+              Owner and driver are the same person for this ownership type.
+            </p>
+          </div>
+        ) : null}
+      </div>
+
       {showSeparateDriver ? (
         <div>
           <div className="text-sm font-bold text-btt-navy mb-2">Driver details</div>
@@ -323,13 +362,11 @@ export default function VehicleInfoFields({
         </div>
       ) : null}
 
-      {showOwner ? (
+      {showOwner && !isDriverOwner ? (
         <div>
-          <div className="text-sm font-bold text-btt-navy mb-2">
-            {isDriverOwner ? "Driver / Owner details" : "Owner details"}
-          </div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Owner details</div>
           <div className={grid}>
-            <Labeled label={isDriverOwner ? "Full name *" : "Owner full name *"}>
+            <Labeled label="Owner full name *">
               <input
                 className={inputCls}
                 value={value.owner_name || ""}
@@ -337,7 +374,7 @@ export default function VehicleInfoFields({
                 placeholder="Full name"
               />
             </Labeled>
-            <Labeled label={isDriverOwner ? "Mobile number *" : "Owner mobile *"}>
+            <Labeled label="Owner mobile *">
               <input
                 className={inputCls}
                 value={value.owner_phone || ""}
@@ -346,18 +383,13 @@ export default function VehicleInfoFields({
                 inputMode="numeric"
               />
             </Labeled>
-            {isDriverOwner ? (
-              <p className="text-xs text-slate-500 md:col-span-1 self-end pb-2">
-                Owner and driver are the same person for this ownership type.
-              </p>
-            ) : null}
           </div>
         </div>
       ) : null}
 
       {showSubVendor ? (
         <div>
-          <div className="text-sm font-bold text-btt-navy mb-2">Sub-vendor details</div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Sub-vendor contact</div>
           <div className={grid}>
             <Labeled label="Sub-vendor full name *">
               <input
@@ -382,7 +414,7 @@ export default function VehicleInfoFields({
 
       {showContractual ? (
         <div>
-          <div className="text-sm font-bold text-btt-navy mb-2">Contractual details</div>
+          <div className="text-sm font-bold text-btt-navy mb-2">Contractual contact</div>
           <div className={grid}>
             <Labeled label="Contractual full name *">
               <input
