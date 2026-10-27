@@ -1,4 +1,4 @@
-const COLORS = ["#2563eb", "#ea580c", "#16a34a", "#7c3aed", "#64748b"];
+const COLORS = ["#1C75BC", "#2AA644", "#0B4F8C", "#1E8B38", "#64748b"];
 
 /** Horizontal bar comparison — no chart library required. */
 export default function CompareBars({ title, segments = [] }) {

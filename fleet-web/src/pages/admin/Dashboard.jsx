@@ -34,12 +34,12 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-xl bg-btt-navy text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="rounded-xl bg-btt-hero text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-brand">
         <div>
-          <div className="text-xs uppercase tracking-wide text-white/70">Fleet overview</div>
+          <div className="text-xs uppercase tracking-wide text-white/80">Fleet overview</div>
           <h1 className="text-xl font-bold">Dashboard — Basaveshwara Tours &amp; Travels</h1>
         </div>
-        <div className="text-xs text-white/80">Main fleet parameters</div>
+        <div className="text-xs text-white/90 font-medium">Main fleet parameters</div>
       </div>
 
       <section>

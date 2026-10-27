@@ -1,14 +1,15 @@
+/** Brand-aligned palette from btttravels.com (green / blue first). */
 const COLORS = [
-  "#16a34a",
-  "#ea580c",
-  "#2563eb",
-  "#7c3aed",
-  "#db2777",
+  "#2AA644",
+  "#1C75BC",
+  "#0B4F8C",
+  "#1E8B38",
   "#0891b2",
   "#ca8a04",
+  "#ea580c",
   "#64748b",
-  "#0f2744",
-  "#1e5a8e",
+  "#7c3aed",
+  "#db2777",
 ];
 
 /** Simple SVG donut chart — no chart library required. */

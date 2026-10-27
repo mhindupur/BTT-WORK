@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import BrandMark from "../components/BrandMark";
 import { useAuth } from "../authContext";
 
 const iconCls = "w-[18px] h-[18px] shrink-0 opacity-90";
@@ -70,7 +71,10 @@ export default function AmLayout() {
   return (
     <div className="h-[100dvh] min-h-0 flex overflow-hidden">
       <aside className="w-60 bg-btt-navy text-slate-100 flex flex-col shrink-0 h-full">
-        <div className="p-4 font-bold border-b border-white/10 tracking-wide shrink-0">BTT Account Manager</div>
+        <div className="p-3 border-b border-white/10 shrink-0 bg-white">
+          <BrandMark variant="compact" showTagline />
+          <div className="mt-1 text-[11px] font-semibold text-btt-navy/80">Account Manager</div>
+        </div>
         <nav className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={linkCls}>
@@ -79,15 +83,15 @@ export default function AmLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="shrink-0 p-4 text-xs border-t border-white/10 bg-btt-navy">
+        <div className="shrink-0 p-4 text-xs border-t border-white/10 bg-btt-blueDark">
           <div className="truncate opacity-80">{user?.full_name || user?.email}</div>
           <div className="truncate opacity-60">View only</div>
-          <button type="button" onClick={logout} className="mt-2 text-amber-200 hover:underline">
+          <button type="button" onClick={logout} className="mt-2 text-btt-mist hover:underline">
             Log out
           </button>
         </div>
       </aside>
-      <main className="flex-1 p-6 overflow-auto min-h-0 min-w-0">
+      <main className="flex-1 p-6 overflow-auto min-h-0 min-w-0 bg-btt-soft">
         <Outlet />
       </main>
     </div>

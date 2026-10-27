@@ -179,9 +179,9 @@ r.get("/summary", async (_req, res) => {
         value: n(row, "value"),
         color:
           row.label === "Single vendor"
-            ? "#2563eb"
+            ? "#1C75BC"
             : row.label === "Multiple vendors"
-              ? "#ea580c"
+              ? "#2AA644"
               : "#94a3b8",
       })),
       by_gps_vendor: byGpsVendor.map((row) => ({ label: row.label, value: n(row, "value") })),

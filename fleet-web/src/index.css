@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --btt-navy: #0b4f8c;
+  --btt-blue: #1c75bc;
+  --btt-green: #2aa644;
+  --btt-green-dark: #1e8b38;
+  --btt-mist: #e8f6ec;
+  --btt-sky: #e7f2fa;
+}
+
 html,
 body,
 #root {
@@ -10,6 +19,11 @@ body,
 }
 
 body {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   overflow: hidden;
+  color: #0f172a;
+}
+
+::selection {
+  background: rgba(42, 166, 68, 0.25);
 }

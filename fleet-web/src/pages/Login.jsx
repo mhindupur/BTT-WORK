@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import BrandMark from "../components/BrandMark";
 import { useAuth } from "../authContext";
 import api from "../api";
 
@@ -69,10 +70,11 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-slate-200 p-8">
-        <h1 className="text-2xl font-bold text-btt-navy">BTT Fleet &amp; Fuel</h1>
-        <p className="text-slate-600 text-sm mt-1">Admin, Account Manager, or Site Manager sign-in</p>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-btt-soft">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-brand border border-btt-sky p-8">
+        <BrandMark variant="full" showTagline className="mb-2" />
+        <h1 className="sr-only">BTT Fleet &amp; Fuel</h1>
+        <p className="text-slate-600 text-sm mt-2">Admin, Account Manager, or Site Manager sign-in</p>
         {mode === "login" ? (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
@@ -104,14 +106,14 @@ export default function Login() {
             {err && <p className="text-red-600 text-sm">{err}</p>}
             <button
               type="submit"
-              className="w-full bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-accent transition"
+              className="w-full bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-green transition"
             >
               Sign in
             </button>
             <div className="grid gap-2">
               <button
                 type="button"
-                className="w-full text-sm font-medium py-2.5 rounded-lg border border-btt-navy text-btt-navy hover:bg-slate-50"
+                className="w-full text-sm font-medium py-2.5 rounded-lg border border-btt-blue text-btt-blue hover:bg-btt-sky"
                 onClick={() => {
                   setPasswordSetup("create");
                   setMode("otp_request");
@@ -121,7 +123,7 @@ export default function Login() {
               </button>
               <button
                 type="button"
-                className="w-full text-sm text-btt-accent font-medium hover:underline"
+                className="w-full text-sm text-btt-greenDark font-medium hover:underline"
                 onClick={() => {
                   setPasswordSetup("forgot");
                   setMode("otp_request");
@@ -176,7 +178,7 @@ export default function Login() {
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-accent transition"
+                className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-green transition"
               >
                 Send OTP
               </button>
@@ -245,7 +247,7 @@ export default function Login() {
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-accent transition"
+                className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-green transition"
               >
                 {passwordSetup === "create" ? "Save password" : "Reset password"}
               </button>

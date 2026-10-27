@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import BrandMark from "../components/BrandMark";
 import { useAuth } from "../authContext";
 
 const iconCls = "w-[18px] h-[18px] shrink-0 opacity-90";
@@ -95,10 +96,13 @@ export default function SmLayout() {
   const { user, logout } = useAuth();
   return (
     <div className="h-[100dvh] min-h-0 flex flex-col md:flex-row bg-slate-50 md:bg-white overflow-hidden">
-      <aside className="w-full md:w-60 bg-btt-accent text-white flex flex-col md:shrink-0 md:h-full border-b md:border-b-0 md:border-r border-white/10 shadow-sm md:shadow-none">
-        <div className="px-3 py-3 md:p-4 font-bold border-b border-white/10 flex items-center justify-between gap-2 min-h-[52px] shrink-0 tracking-wide">
-          <span className="text-base md:text-lg">Site Manager</span>
-          <span className="md:hidden text-xs font-normal opacity-90 truncate max-w-[45%]" title={user?.full_name}>
+      <aside className="w-full md:w-60 bg-btt-greenDark text-white flex flex-col md:shrink-0 md:h-full border-b md:border-b-0 md:border-r border-white/10 shadow-sm md:shadow-none">
+        <div className="px-3 py-2 md:p-3 border-b border-white/10 flex items-center justify-between gap-2 min-h-[52px] shrink-0 bg-white">
+          <div className="min-w-0">
+            <BrandMark variant="compact" showTagline />
+            <div className="text-[11px] font-semibold text-btt-greenDark">Site Manager</div>
+          </div>
+          <span className="md:hidden text-xs font-normal text-slate-600 truncate max-w-[40%]" title={user?.full_name}>
             {user?.full_name}
           </span>
         </div>
@@ -110,10 +114,10 @@ export default function SmLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="hidden md:block shrink-0 p-4 text-xs border-t border-white/10 bg-btt-accent">
+        <div className="hidden md:block shrink-0 p-4 text-xs border-t border-white/10 bg-btt-greenDark">
           <div className="truncate opacity-90 font-medium">{user?.full_name}</div>
           <div className="truncate opacity-70 mt-0.5">{user?.email}</div>
-          <button type="button" onClick={logout} className="mt-2 text-amber-200 hover:underline text-left w-full py-1">
+          <button type="button" onClick={logout} className="mt-2 text-btt-mist hover:underline text-left w-full py-1">
             Log out
           </button>
         </div>
