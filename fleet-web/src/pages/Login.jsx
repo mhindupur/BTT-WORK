@@ -72,7 +72,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-btt-soft">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-brand border border-btt-sky p-8">
-        <BrandMark variant="full" showTagline className="mb-2" />
+        <BrandMark variant="full" className="mb-2" />
         <h1 className="sr-only">NUCLICK — The Nucleus of Operational Intelligence</h1>
         <p className="text-slate-600 text-sm mt-2">Admin, Account Manager, or Site Manager sign-in</p>
         {mode === "login" ? (

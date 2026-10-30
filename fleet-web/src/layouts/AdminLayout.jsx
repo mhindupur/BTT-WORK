@@ -190,7 +190,7 @@ export default function AdminLayout() {
     <div className="h-[100dvh] min-h-0 flex overflow-hidden">
       <aside className="w-60 bg-btt-navy text-slate-100 flex flex-col shrink-0 h-full">
         <div className="p-3 border-b border-white/10 shrink-0 bg-white">
-          <BrandMark variant="compact" showTagline />
+          <BrandMark variant="compact" />
           <div className="mt-1 text-[11px] font-semibold text-btt-navy/80">Admin</div>
         </div>
         <nav className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">

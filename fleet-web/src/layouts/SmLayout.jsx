@@ -99,7 +99,7 @@ export default function SmLayout() {
       <aside className="w-full md:w-60 bg-btt-greenDark text-white flex flex-col md:shrink-0 md:h-full border-b md:border-b-0 md:border-r border-white/10 shadow-sm md:shadow-none">
         <div className="px-3 py-2 md:p-3 border-b border-white/10 flex items-center justify-between gap-2 min-h-[52px] shrink-0 bg-white">
           <div className="min-w-0">
-            <BrandMark variant="compact" showTagline />
+            <BrandMark variant="compact" />
             <div className="text-[11px] font-semibold text-btt-greenDark">Site Manager</div>
           </div>
           <span className="md:hidden text-xs font-normal text-slate-600 truncate max-w-[40%]" title={user?.full_name}>

@@ -12,7 +12,6 @@ export default function BrandMark({
   variant = "full",
   className = "",
   title = BRAND.name,
-  showTagline = false,
   showCaption = true,
   inverted = false,
 }) {
@@ -24,7 +23,6 @@ export default function BrandMark({
   const nameSize = variant === "compact" ? "text-sm" : variant === "stack" ? "text-xl" : "text-base";
   const nameCls = inverted ? "text-white" : "text-btt-blue";
   const captionCls = inverted ? "text-white/75" : "text-slate-600";
-  const tagCls = inverted ? "text-white/70" : "text-btt-greenDark";
 
   return (
     <div
@@ -32,27 +30,20 @@ export default function BrandMark({
       title={`${BRAND.name} — ${BRAND.caption}`}
       aria-label={title}
     >
-      <div
-        className={`rounded-md ${inverted ? "bg-white px-2 py-1.5 shadow-sm" : ""}`}
-      >
+      <div className={`rounded-md ${inverted ? "bg-white px-2 py-1.5 shadow-sm" : ""}`}>
         <img
           src={BRAND.logoSrc}
           alt={BRAND.name}
           className={`${heights[variant] || heights.full} w-auto max-w-full object-contain object-left`}
         />
       </div>
-      <div className={variant === "stack" ? "" : ""}>
+      <div>
         <div className={`${nameSize} font-extrabold tracking-tight leading-none ${nameCls}`}>
           {BRAND.name}
         </div>
         {showCaption ? (
           <div className={`mt-0.5 text-[10px] font-medium leading-snug max-w-[15rem] ${captionCls}`}>
             {BRAND.caption}
-          </div>
-        ) : null}
-        {showTagline ? (
-          <div className={`mt-0.5 text-[10px] uppercase tracking-[0.14em] font-semibold ${tagCls}`}>
-            {BRAND.productLine}
           </div>
         ) : null}
       </div>

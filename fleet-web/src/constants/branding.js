@@ -9,7 +9,6 @@ export const BRAND = {
   name: "NUCLICK",
   caption: "The Nucleus of Operational Intelligence",
   shortCaption: "Operational Intelligence",
-  productLine: "Fleet & Fuel",
   logoSrc: "/nuclick-logo.jpg",
   /** Colors sampled / matched from the official logo mark */
   colors: {
