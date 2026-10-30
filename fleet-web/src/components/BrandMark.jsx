@@ -11,9 +11,9 @@ export default function BrandMark({
   inverted = false,
 }) {
   const heights = {
-    full: "h-16",
-    compact: "h-11",
-    stack: "h-20",
+    full: "h-24",
+    compact: "h-14",
+    stack: "h-28",
   };
 
   return (
@@ -22,7 +22,7 @@ export default function BrandMark({
         <img
           src={BRAND.logoSrc}
           alt={BRAND.name}
-          className={`${heights[variant] || heights.full} w-auto max-w-full object-contain object-left`}
+          className={`${heights[variant] || heights.full} w-auto max-w-full object-contain`}
         />
       </div>
     </div>
