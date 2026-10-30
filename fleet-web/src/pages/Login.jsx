@@ -72,9 +72,9 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-btt-soft">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-brand border border-btt-sky p-8">
-        <BrandMark variant="full" className="mb-2" />
+        <BrandMark variant="full" className="mb-3 justify-center" />
         <h1 className="sr-only">NUCLICK</h1>
-        <p className="text-slate-600 text-sm mt-2">Admin, Account Manager, or Site Manager sign-in</p>
+        <p className="text-slate-600 text-sm mt-2 text-center">Admin, Account Manager, or Site Manager sign-in</p>
         {mode === "login" ? (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
