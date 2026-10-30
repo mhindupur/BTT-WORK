@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>BTT Fleet — AWS EC2 Operations Runbook</title>
+<style>
+body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-width: 920px; margin: 24px auto; padding: 0 16px; line-height: 1.45; white-space: pre-wrap; }
+h1 { font-size: 1.2rem; }
+</style>
+</head>
+<body><pre># BTT Fleet — AWS EC2 Operations Runbook
+
+**Document type:** Installation + troubleshooting runbook  
+**App:** BTT Fleet &amp; Fuel (`fleet-web` + `fleet-api` + MySQL `btt_fleet`)  
+**Branch:** `cursor/btt-fleet-proposal`  
+**Repo:** https://github.com/mhindupur/BTT-WORK  
+**Last updated:** 2026-08-07  
+
+This runbook consolidates the full EC2 install procedure **and** real issues faced during first production install (MySQL access denied, empty users table, Nginx 504).
+
+---
+
+## 1. Architecture
+
+```
+Browser  →  http(s)://EC2_PUBLIC_IP_OR_DOMAIN
+                │
+            Nginx (:80 / :443)
+           /        |         \
+     static FE    /api/*    /uploads/*
+  fleet-web/dist    │            │
+                    └─ fleet-api (:4000, PM2)
+                              │
+                         MySQL (:3306)
+                         DB: btt_fleet
+                         User: btt@localhost
+```
+
+| Layer | Path | Runtime |
+|-------|------|---------|
+| Frontend | `fleet-web/` | Vite build → Nginx static |
+| Backend | `fleet-api/` | Node.js Express on PM2 |
+| Database | `fleet-db/` | MySQL 8 |
+
+**Do not expose** ports `3306` or `4000` publicly. Only `22`, `80`, and optionally `443`.
+
+---
+
+## 2. EC2 prerequisites
+
+| Item | Recommendation |
+|------|----------------|
+| AMI | Ubuntu Server 22.04 LTS |
+| Size | t3.small or larger (2 GB+ RAM) |
+| Disk | 20 GB gp3 minimum |
+| SG inbound | SSH 22 (your IP), HTTP 80, HTTPS 443 |
+| Elastic IP | Recommended |
+
+SSH:
+```bash
+chmod 400 your-key.pem
+ssh -i your-key.pem ubuntu@YOUR_EC2_PUBLIC_IP
+```
+
+---
+
+## 3. Base packages
+
+```bash
+sudo apt update &amp;&amp; sudo apt upgrade -y
+sudo apt install -y git curl build-essential nginx mysql-server
+
+# Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2
+
+node -v
+npm -v
+sudo systemctl enable --now mysql nginx
+```
+
+---
+
+## 4. MySQL — create database and app user
+
+### 4.1 Important (Ubuntu)
+
+On Ubuntu, MySQL `root` usually uses **socket auth**. Prefer:
+
+```bash
+sudo mysql
+```
+
+Not `mysql -u root -p` (that often fails unless you set a root password).
+
+### 4.2 Create DB + user (proven working pattern)
+
+```sql
+CREATE DATABASE IF NOT EXISTS btt_fleet CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+DROP USER IF EXISTS &#x27;btt&#x27;@&#x27;localhost&#x27;;
+CREATE USER &#x27;btt&#x27;@&#x27;localhost&#x27; IDENTIFIED WITH mysql_native_password BY &#x27;BttFleet2026&#x27;;
+GRANT ALL PRIVILEGES ON btt_fleet.* TO &#x27;btt&#x27;@&#x27;localhost&#x27;;
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+&gt; Use a password **without `@`**. `@` breaks naive `DATABASE_URL` parsing unless URL-encoded as `%40`.
+
+### 4.3 Verify MySQL login
+
+```bash
+mysql -u btt -pBttFleet2026 -e &quot;SELECT USER(), CURRENT_USER();&quot;
+```
+
+### 4.4 Issue faced: `ERROR 1045 Access denied for user &#x27;btt&#x27;@&#x27;localhost&#x27;`
+
+**Cause:** User never created, wrong password, or password mismatch with what you type.
+
+**Fix:** Re-run section 4.2 (`DROP USER` + `CREATE USER`), then retest 4.3.
+
+---
+
+## 5. Clone application code
+
+```bash
+# Home clone (also fine):
+cd ~
+git clone https://github.com/mhindupur/BTT-WORK.git
+cd BTT-WORK
+git checkout cursor/btt-fleet-proposal
+git pull origin cursor/btt-fleet-proposal
+
+# Or production path used in deploy guide:
+# sudo mkdir -p /opt/btt &amp;&amp; sudo chown ubuntu:ubuntu /opt/btt
+# cd /opt/btt &amp;&amp; git clone ... 
+```
+
+Paths below assume `~/BTT-WORK`. Adjust if you use `/opt/btt/BTT-WORK`.
+
+---
+
+## 6. Load schema
+
+```bash
+cd ~/BTT-WORK
+mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/schema.sql
+```
+
+`schema.sql` includes current tables (vehicles approval, OTP, vehicle types, etc.).
+
+If upgrading an older DB only, apply additive migrations as needed:
+```bash
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_002_indent_serial_batches.sql
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_003_password_reset_otps.sql
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_004_vehicle_approval.sql
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_005_vehicle_types.sql
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_006_vehicle_fleetbook_fields.sql
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_007_fuel_indent_serial.sql
+# mysql -u btt -pBttFleet2026 btt_fleet &lt; fleet-db/migration_008_site_codes_sla.sql
+```
+
+Verify tables:
+```bash
+mysql -u btt -pBttFleet2026 btt_fleet -e &quot;SHOW TABLES;&quot;
+```
+
+---
+
+## 7. Backend (fleet-api)
+
+### 7.1 Configure `.env`
+
+```bash
+cd ~/BTT-WORK/fleet-api
+cp .env.example .env
+nano .env
+```
+
+Minimum production values:
+
+```env
+PORT=4000
+DATABASE_URL=mysql://btt:BttFleet2026@127.0.0.1:3306/btt_fleet
+JWT_SECRET=REPLACE_WITH_LONG_RANDOM_SECRET
+
+PUBLIC_WEB_ORIGIN=http://YOUR_EC2_PUBLIC_IP
+PAYMENT_PUBLIC_BASE_URL=http://YOUR_EC2_PUBLIC_IP
+UPLOAD_DIR=/home/ubuntu/BTT-WORK/fleet-api/uploads
+WHATSAPP_PROVIDER=stub
+
+ADMIN_EMAIL=admin@btt.fleet
+ADMIN_PASSWORD=Admin@123
+DEMO_SM_EMAIL=supervisor@btt.fleet
+DEMO_SM_PASSWORD=Supervisor@123
+```
+
+Replace `YOUR_EC2_PUBLIC_IP` with the real IP (example: `http://15.207.55.223`).
+
+### 7.2 Install, seed users, start with PM2
+
+```bash
+mkdir -p ~/BTT-WORK/fleet-api/uploads
+cd ~/BTT-WORK/fleet-api
+npm install --omit=dev
+npm run seed
+pm2 start src/index.js --name btt-fleet-api
+pm2 save
+pm2 startup
+# run the sudo command printed by pm2 startup
+```
+
+Seed should print:
+```text
+[seed] Admin login: admin@btt.fleet / Admin@123
+[seed] Supervisor / Site manager login: supervisor@btt.fleet / Supervisor@123
+```
+
+### 7.3 Verify API locally
+
+```bash
+pm2 status
+curl --max-time 5 http://127.0.0.1:4000/api/health
+# {&quot;status&quot;:&quot;ok&quot;,&quot;app&quot;:&quot;btt-fleet-api&quot;}
+```
+
+### 7.4 Issue faced: `users` table empty / cannot login
+
+**Symptom:**
+```sql
+SELECT * FROM users;
+-- Empty set
+```
+
+**Cause:** Schema loaded, but **`npm run seed` was never run** (or ran against a different DB/password).
+
+**Fix A — seed:**
+```bash
+cd ~/BTT-WORK/fleet-api
+grep DATABASE_URL .env
+npm run seed
+mysql -u btt -pBttFleet2026 btt_fleet -e &quot;SELECT id,email,role FROM users;&quot;
+pm2 restart btt-fleet-api
+```
+
+**Fix B — manual admin insert (if seed unavailable):**
+```sql
+USE btt_fleet;
+
+INSERT INTO users (email, password_hash, role, full_name, phone, is_active)
+VALUES (
+  &#x27;admin@btt.fleet&#x27;,
+  &#x27;$2a$10$08WoFBwpnAQWIJJH5GN.M./VS0e9LelrYF8TS5BAWVgAeGT1hTN86&#x27;,
+  &#x27;admin&#x27;,
+  &#x27;BTT Administrator&#x27;,
+  NULL,
+  1
+);
+
+-- Optional site manager:
+INSERT INTO users (email, password_hash, role, full_name, phone, is_active)
+VALUES (
+  &#x27;supervisor@btt.fleet&#x27;,
+  &#x27;$2a$10$bhmFIr/ZyhXR0/A1fblKhegDQPCdBdakN1mlCPHLUqdww.ZUJ8uz6&#x27;,
+  &#x27;site_manager&#x27;,
+  &#x27;Demo Site Supervisor&#x27;,
+  &#x27;9999000002&#x27;,
+  1
+);
+
+INSERT INTO clients (name) VALUES (&#x27;Demo Client (BTT)&#x27;);
+SET @cid = LAST_INSERT_ID();
+INSERT INTO site_managers (user_id, client_id, location_label)
+SELECT id, @cid, &#x27;Plant A&#x27; FROM users WHERE email=&#x27;supervisor@btt.fleet&#x27;;
+
+SELECT id,email,role FROM users;
+```
+
+Passwords for those hashes:
+- Admin: `admin@btt.fleet` / `Admin@123`
+- SM: `supervisor@btt.fleet` / `Supervisor@123`
+
+```bash
+pm2 restart btt-fleet-api
+```
+
+---
+
+## 8. Frontend (fleet-web)
+
+```bash
+cd ~/BTT-WORK/fleet-web
+npm install
+npm run build
+# output: fleet-web/dist/
+```
+
+Frontend calls relative `/api` (same host). Nginx must proxy `/api` to the API.
+
+---
+
+## 9. Nginx reverse proxy
+
+```bash
+sudo nano /etc/nginx/sites-available/btt-fleet
+```
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+
+    client_max_body_size 20M;
+
+    root /home/ubuntu/BTT-WORK/fleet-web/dist;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 60s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+Enable:
+```bash
+sudo ln -sf /etc/nginx/sites-available/btt-fleet /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+If app lives under `/opt/btt/BTT-WORK`, change `root` accordingly.
+
+---
+
+## 10. End-to-end verification
+
+### On server
+```bash
+curl --max-time 5 http://127.0.0.1:4000/api/health
+curl --max-time 10 -X POST http://127.0.0.1:4000/api/auth/login \
+  -H &#x27;Content-Type: application/json&#x27; \
+  -d &#x27;{&quot;email&quot;:&quot;admin@btt.fleet&quot;,&quot;password&quot;:&quot;Admin@123&quot;}&#x27;
+
+curl --max-time 10 -X POST http://127.0.0.1/api/auth/login \
+  -H &#x27;Content-Type: application/json&#x27; \
+  -d &#x27;{&quot;email&quot;:&quot;admin@btt.fleet&quot;,&quot;password&quot;:&quot;Admin@123&quot;}&#x27;
+```
+
+### In browser
+Open `http://YOUR_EC2_PUBLIC_IP/`  
+Login: `admin@btt.fleet` / `Admin@123`
+
+---
+
+## 11. Issues faced during first EC2 install (and fixes)
+
+### Issue A — MySQL `ERROR 1045 (28000): Access denied for user &#x27;btt&#x27;@&#x27;localhost&#x27;`
+
+| Item | Detail |
+|------|--------|
+| When | `mysql -u btt -p btt_fleet &lt; fleet-db/schema.sql` |
+| Cause | `btt` user missing or wrong password |
+| Fix | Recreate user with `sudo mysql` + `DROP USER` / `CREATE USER` (section 4.2) |
+| Prevention | Always test `mysql -u btt -p... -e &quot;SELECT 1;&quot;` before schema load |
+
+### Issue B — Nginx `504 Gateway Time-out` on `/api/auth/login`
+
+| Item | Detail |
+|------|--------|
+| When | Browser login via `http://EC2_IP/api/auth/login` |
+| Observed | FE reachable; API health OK (`pm2 online`, `/api/health` 200) |
+| Root cause found | `users` table empty — no admin to authenticate / incomplete setup |
+| Secondary causes | API down, MySQL hang, wrong Nginx `proxy_pass` |
+| Fix | Ensure users exist (`npm run seed` or manual INSERT), restart PM2, retest login on `:4000` then via Nginx |
+
+**Decision tree used:**
+1. `pm2 status` + `curl 127.0.0.1:4000/api/health` → API healthy  
+2. Direct login to `:4000` → fails / empty users  
+3. `SELECT * FROM users` → Empty set  
+4. Seed / manual INSERT → login works  
+
+### Issue C — `SELECT * FROM users` returns Empty set
+
+| Item | Detail |
+|------|--------|
+| Cause | Schema applied; seed not run |
+| Fix | `cd fleet-api &amp;&amp; npm run seed` **or** manual INSERT (section 7.4) |
+| Verify | `SELECT id,email,role FROM users;` returns admin (+ SM) |
+
+### Issue D — Cloud `127.0.0.1:5174` vs laptop localhost (dev note)
+
+Cloud agent localhost is **not** your Mac. For EC2 production use public IP via Nginx. For local Mac use `./scripts/local-up.sh`.
+
+---
+
+## 12. Demo credentials
+
+| Role | Email | Password |
+|------|--------|----------|
+| Admin | `admin@btt.fleet` | `Admin@123` |
+| Site manager | `supervisor@btt.fleet` | `Supervisor@123` |
+
+Change passwords after first successful login (Admin → Site managers → Set password).
+
+---
+
+## 13. Day-2 operations
+
+### Restart services
+```bash
+pm2 restart btt-fleet-api
+sudo systemctl reload nginx
+sudo systemctl restart mysql   # only if needed
+```
+
+### View logs
+```bash
+pm2 logs btt-fleet-api --lines 100
+sudo tail -n 100 /var/log/nginx/error.log
+```
+
+### Deploy code update
+```bash
+cd ~/BTT-WORK
+git pull origin cursor/btt-fleet-proposal
+
+cd fleet-api
+npm install --omit=dev
+pm2 restart btt-fleet-api
+
+cd ../fleet-web
+npm install
+npm run build
+```
+
+### Health checklist
+```bash
+pm2 status
+curl -s http://127.0.0.1:4000/api/health
+mysql -u btt -pBttFleet2026 -e &quot;SELECT COUNT(*) AS users FROM btt_fleet.users;&quot;
+sudo systemctl is-active nginx mysql
+```
+
+---
+
+## 14. HTTPS (optional)
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d fleet.yourdomain.com
+```
+
+Update `.env`:
+```env
+PUBLIC_WEB_ORIGIN=https://fleet.yourdomain.com
+PAYMENT_PUBLIC_BASE_URL=https://fleet.yourdomain.com
+```
+```bash
+pm2 restart btt-fleet-api
+```
+
+---
+
+## 15. Quick reference — critical files
+
+| File | Purpose |
+|------|---------|
+| `fleet-api/.env` | DB URL, JWT, public origin, uploads |
+| `fleet-db/schema.sql` | Full schema |
+| `fleet-web/dist/` | Production FE assets |
+| `/etc/nginx/sites-available/btt-fleet` | Reverse proxy |
+| `docs/AWS-EC2-DEPLOY.md` | Original deploy guide |
+| `docs/AWS-EC2-RUNBOOK.md` | This runbook |
+
+---
+
+## 16. Related docs in repo
+
+- [AWS-EC2-DEPLOY.md](./AWS-EC2-DEPLOY.md) — step-by-step deploy  
+- [LOCAL-DEV-CHEATSHEET.md](./LOCAL-DEV-CHEATSHEET.md) — local Mac Docker start  
+- [PROPOSAL-APP-README.md](./PROPOSAL-APP-README.md) — feature overview  
+- Root [README.md](../README.md) — quick links  
+
+---
+
+*End of runbook*
+</pre></body>
+</html>
