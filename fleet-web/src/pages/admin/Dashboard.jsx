@@ -37,7 +37,8 @@ export default function AdminDashboard() {
       <div className="rounded-xl bg-btt-hero text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-brand">
         <div>
           <div className="text-xs uppercase tracking-wide text-white/80">Fleet overview</div>
-          <h1 className="text-xl font-bold">Dashboard — Basaveshwara Tours &amp; Travels</h1>
+          <h1 className="text-xl font-bold">Dashboard — NUCLICK</h1>
+          <div className="text-xs text-white/85 mt-0.5">The Nucleus of Operational Intelligence</div>
         </div>
         <div className="text-xs text-white/90 font-medium">Main fleet parameters</div>
       </div>

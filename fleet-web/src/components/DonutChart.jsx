@@ -1,4 +1,4 @@
-/** Brand-aligned palette from btttravels.com (green / blue first). */
+/** NUCLICK logo color theme (green / blue first). */
 const COLORS = [
   "#2AA644",
   "#1C75BC",

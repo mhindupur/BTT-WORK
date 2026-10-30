@@ -3,8 +3,9 @@
 @tailwind utilities;
 
 :root {
+  /* NUCLICK logo color theme */
   --btt-navy: #0b4f8c;
-  --btt-blue: #1c75bc;
+  --btt-blue: #106eba;
   --btt-green: #2aa644;
   --btt-green-dark: #1e8b38;
   --btt-mist: #e8f6ec;
