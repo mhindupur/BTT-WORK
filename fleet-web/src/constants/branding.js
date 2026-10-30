@@ -1,9 +1,10 @@
 /**
- * NUCLICK product branding — logo-only mark in UI.
- * Official logo: /nuclick-logo.jpg (includes wordmark in artwork).
+ * NUCLICK product branding.
+ * Logo icon + title + caption in BrandMark.
  */
 export const BRAND = {
   name: "NUCLICK",
+  caption: "The Nucleus of Operational Intelligence",
   logoSrc: "/nuclick-logo.png",
   /** Logo color theme */
   colors: {
@@ -15,4 +16,4 @@ export const BRAND = {
   },
 };
 
-export const APP_DOCUMENT_TITLE = BRAND.name;
+export const APP_DOCUMENT_TITLE = `${BRAND.name} — ${BRAND.caption}`;
