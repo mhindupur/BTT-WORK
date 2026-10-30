@@ -11,9 +11,9 @@ export default function BrandMark({
   inverted = false,
 }) {
   const heights = {
-    full: "h-14",
-    compact: "h-10",
-    stack: "h-16",
+    full: "h-16",
+    compact: "h-12",
+    stack: "h-20",
   };
 
   return (
