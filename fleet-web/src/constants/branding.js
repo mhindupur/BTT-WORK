@@ -4,7 +4,7 @@
  */
 export const BRAND = {
   name: "NUCLICK",
-  logoSrc: "/nuclick-logo.jpg",
+  logoSrc: "/nuclick-logo.png",
   /** Logo color theme */
   colors: {
     blue: "#00529B",
