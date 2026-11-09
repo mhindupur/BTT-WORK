@@ -322,6 +322,54 @@ export default function VehicleInfoFields({
             onChange={(e) => set({ attach_date: e.target.value })}
           />
         </Labeled>
+        <Labeled label="Engine number">
+          <input
+            className={`${inputCls} font-mono uppercase`}
+            value={value.engine_number || ""}
+            onChange={(e) => set({ engine_number: e.target.value.toUpperCase() })}
+            placeholder="From RC preview"
+          />
+        </Labeled>
+        <Labeled label="Chassis number">
+          <input
+            className={`${inputCls} font-mono uppercase`}
+            value={value.chassis_number || ""}
+            onChange={(e) => set({ chassis_number: e.target.value.toUpperCase() })}
+            placeholder="From RC preview"
+          />
+        </Labeled>
+        <Labeled label="GPS">
+          <select className={inputCls} value={gpsOn ? "1" : "0"} onChange={(e) => onGpsChange(e.target.value)}>
+            {GPS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+        <Labeled label="GPS IMEI no">
+          <input
+            className={`${inputCls} font-mono`}
+            value={value.gps_imei || ""}
+            onChange={(e) => set({ gps_imei: e.target.value })}
+            disabled={!gpsOn}
+          />
+        </Labeled>
+        <Labeled label="GPS type / vendor">
+          <select
+            className={inputCls}
+            value={value.gps_vendor_id || ""}
+            onChange={(e) => onGpsVendorChange(e.target.value)}
+            disabled={!gpsOn}
+          >
+            <option value="">Select GPS type</option>
+            {gpsVendors.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </Labeled>
         {showStatus ? (
           <Labeled label="Status (active)">
             <select
@@ -508,60 +556,6 @@ export default function VehicleInfoFields({
     <AccountFields value={value} set={set} title={accountSectionTitle(ownership)} />
   ) : null;
 
-  const technicalBlock = (
-    <div>
-      <div className="text-sm font-bold text-btt-navy mb-2">Technical & GPS</div>
-      <div className={grid}>
-        <Labeled label="Engine number">
-          <input
-            className={`${inputCls} font-mono uppercase`}
-            value={value.engine_number || ""}
-            onChange={(e) => set({ engine_number: e.target.value.toUpperCase() })}
-          />
-        </Labeled>
-        <Labeled label="Chassis number">
-          <input
-            className={`${inputCls} font-mono uppercase`}
-            value={value.chassis_number || ""}
-            onChange={(e) => set({ chassis_number: e.target.value.toUpperCase() })}
-          />
-        </Labeled>
-        <Labeled label="GPS">
-          <select className={inputCls} value={gpsOn ? "1" : "0"} onChange={(e) => onGpsChange(e.target.value)}>
-            {GPS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Labeled>
-        <Labeled label="GPS IMEI no">
-          <input
-            className={`${inputCls} font-mono`}
-            value={value.gps_imei || ""}
-            onChange={(e) => set({ gps_imei: e.target.value })}
-            disabled={!gpsOn}
-          />
-        </Labeled>
-        <Labeled label="GPS type / vendor">
-          <select
-            className={inputCls}
-            value={value.gps_vendor_id || ""}
-            onChange={(e) => onGpsVendorChange(e.target.value)}
-            disabled={!gpsOn}
-          >
-            <option value="">Select GPS type</option>
-            {gpsVendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </Labeled>
-      </div>
-    </div>
-  );
-
   const expiryBlock = showExpirySection ? (
     <div>
       <div className="text-sm font-bold text-btt-navy mb-2">Certificate & permit expiry</div>
@@ -623,7 +617,6 @@ export default function VehicleInfoFields({
       {vehicleBlock}
       {driverBlock}
       {bankingBlock}
-      {technicalBlock}
       {expiryBlock}
       <Labeled label="Notes (optional)">
         <input
