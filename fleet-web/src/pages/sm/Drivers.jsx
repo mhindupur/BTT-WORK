@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api";
+import { minExpiryISODate } from "../../utils/dateRules";
 
 const emptyForm = () => ({
   full_name: "",
@@ -150,6 +151,7 @@ export default function SmDrivers() {
               type="date"
               className="mt-1 w-full border rounded-xl px-3 py-2"
               value={uploadExpiry}
+              min={minExpiryISODate()}
               onChange={(e) => setUploadExpiry(e.target.value)}
               required
             />
