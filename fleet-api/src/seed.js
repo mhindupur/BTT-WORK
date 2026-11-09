@@ -24,19 +24,32 @@ async function main() {
   const smEmail = (process.env.DEMO_SM_EMAIL || "supervisor@btt.fleet").trim().toLowerCase();
   const smPass = process.env.DEMO_SM_PASSWORD || "Supervisor@123";
 
-  await ensureUser(adminEmail, adminPass, "admin", "BTT Administrator");
-  console.log("[seed] Admin login:", adminEmail, "/", adminPass);
+  const adminPhone = process.env.ADMIN_PHONE || "+919999000001";
+  await ensureUser(adminEmail, adminPass, "admin", "BTT Administrator", adminPhone);
+  // Ensure admin phone for OTP login even if user already existed
+  await execute("UPDATE users SET phone = COALESCE(phone, ?) WHERE email = ? AND role = 'admin'", [
+    adminPhone,
+    adminEmail,
+  ]);
+  console.log("[seed] Admin login:", adminEmail, "/", adminPass, "(OTP phone", adminPhone + ")");
 
   const clientName = "Demo Client (BTT)";
+  const demoSiteCode = "DEMOSITE1";
   let client = await queryOne("SELECT id FROM clients WHERE name = ?", [clientName]);
   if (!client) {
     const cr = await execute(
       "INSERT INTO clients (name, site_code, email, phone, address) VALUES (?,?,?,?,?)",
-      [clientName, "DEMOC", "demo-client@btt.example", "+919999000001", "Bengaluru, Karnataka"]
+      [clientName, demoSiteCode, "demo-client@btt.example", "+919999000001", "Bengaluru, Karnataka"]
     );
     client = { id: cr.insertId };
+  } else {
+    // Widen legacy 5-char demo codes to min 8 alphanumeric
+    await execute(
+      "UPDATE clients SET site_code = ? WHERE id = ? AND CHAR_LENGTH(site_code) < 8",
+      [demoSiteCode, client.id]
+    );
   }
-  console.log("[seed] Demo client id:", client.id);
+  console.log("[seed] Demo client id:", client.id, "site_code:", demoSiteCode);
 
   const amEmail = (process.env.DEMO_AM_EMAIL || "account@btt.fleet").trim().toLowerCase();
   const amPass = process.env.DEMO_AM_PASSWORD || "Account@123";
@@ -91,7 +104,7 @@ async function main() {
   if (!vehicle) {
     const vr = await execute(
       "INSERT INTO vehicles (client_id, registration_number, vehicle_serial, owner_name, owner_phone) VALUES (?,?,?,?,?)",
-      [client.id, reg, "DEMOC0001", "Suresh Patil", "+919988776655"]
+      [client.id, reg, "DEMOSITE10001", "Suresh Patil", "+919988776655"]
     );
     vehicle = { id: vr.insertId };
   }

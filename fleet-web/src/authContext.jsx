@@ -25,6 +25,16 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
+    if (data.otp_required && data.admin_login_pending) {
+      return data; // caller must complete OTP; do not store token yet
+    }
+    localStorage.setItem("fleet_token", data.access_token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const completeAdminOtp = async (userId, otp) => {
+    const { data } = await api.post("/auth/verify-admin-otp", { user_id: userId, otp });
     localStorage.setItem("fleet_token", data.access_token);
     setUser(data.user);
     return data.user;
@@ -35,7 +45,10 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  const v = useMemo(() => ({ user, ready, login, logout }), [user, ready]);
+  const v = useMemo(
+    () => ({ user, ready, login, logout, completeAdminOtp }),
+    [user, ready]
+  );
   return <Ctx.Provider value={v}>{children}</Ctx.Provider>;
 }
 

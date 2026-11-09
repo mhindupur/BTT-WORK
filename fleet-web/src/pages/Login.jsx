@@ -5,16 +5,18 @@ import { useAuth } from "../authContext";
 import api from "../api";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, completeAdminOtp } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [mode, setMode] = useState("login"); // login | otp_request | otp_reset
+  const [mode, setMode] = useState("login"); // login | otp_request | otp_reset | admin_otp
   /** create = first-time password; forgot = reset existing */
   const [passwordSetup, setPasswordSetup] = useState(null);
+  const [adminPendingUserId, setAdminPendingUserId] = useState(null);
+  const [adminPhoneHint, setAdminPhoneHint] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -22,17 +24,48 @@ export default function Login() {
     return String(s || "").replace(/\D/g, "").slice(0, 10);
   }
 
+  function routeAfterLogin(u) {
+    if (u.role === "admin") nav("/admin");
+    else if (u.role === "account_manager") nav("/am");
+    else nav("/sm");
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     setErr("");
     setMsg("");
     try {
-      const u = await login(email, password);
-      if (u.role === "admin") nav("/admin");
-      else if (u.role === "account_manager") nav("/am");
-      else nav("/sm");
+      const result = await login(email, password);
+      if (result?.otp_required && result?.admin_login_pending) {
+        setAdminPendingUserId(result.user_id);
+        setAdminPhoneHint(result.phone_hint || "");
+        setMsg(
+          result.dev_otp
+            ? `${result.message || "OTP sent."} (dev OTP: ${result.dev_otp})`
+            : result.message || "OTP sent. Enter it to complete admin sign-in."
+        );
+        setMode("admin_otp");
+        setOtp(result.dev_otp || "");
+        return;
+      }
+      routeAfterLogin(result);
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message || "Login failed");
+    }
+  }
+
+  async function onAdminOtp(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      const u = await completeAdminOtp(
+        adminPendingUserId,
+        String(otp || "").replace(/\D/g, "").slice(0, 6)
+      );
+      routeAfterLogin(u);
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message || "OTP verification failed");
     }
   }
 
@@ -78,18 +111,20 @@ export default function Login() {
         {mode === "login" ? (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
-              <strong className="text-slate-800">Site managers:</strong> sign in with <strong>email + password</strong>.
-              OTP is only used on the next screens. New account? Use <strong>Create password</strong>. Already have an
-              account but forgot the password? Use <strong>Forgot password</strong>.
+              <strong className="text-slate-800">Site managers:</strong> sign in with{" "}
+              <strong>Site code + password</strong> (alphanumeric site code). Admin / Account Manager use email.
+              Admin sign-in also requires a WhatsApp OTP when a phone is configured.
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Email</label>
+              <label className="block text-sm font-medium text-slate-700">Email or Site code</label>
               <input
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                type="email"
+                type="text"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                placeholder="admin@… or SITECODE01"
               />
             </div>
             <div>
@@ -130,6 +165,42 @@ export default function Login() {
                 }}
               >
                 Site manager: Forgot password?
+              </button>
+            </div>
+          </form>
+        ) : mode === "admin_otp" ? (
+          <form onSubmit={onAdminOtp} className="mt-6 space-y-4">
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              <strong>Admin security check.</strong> Enter the OTP sent to WhatsApp
+              {adminPhoneHint ? ` (${adminPhoneHint})` : ""}.
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">OTP</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono tracking-widest"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                required
+                placeholder="6-digit OTP"
+              />
+            </div>
+            {msg && <p className="text-green-700 text-sm">{msg}</p>}
+            {err && <p className="text-red-600 text-sm">{err}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="flex-1 border rounded-lg py-2.5"
+                onClick={() => {
+                  setMode("login");
+                  setAdminPendingUserId(null);
+                  setOtp("");
+                }}
+              >
+                Back
+              </button>
+              <button type="submit" className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg">
+                Verify &amp; sign in
               </button>
             </div>
           </form>

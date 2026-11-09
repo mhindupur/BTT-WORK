@@ -61,6 +61,7 @@ export const emptyVehicleDetails = () => ({
   fuel_type: "",
   seating_capacity: "",
   registration_date: "",
+  registered_date: "",
   manufacture_year: "",
   attach_date: "",
   sub_vendor: "",
@@ -73,7 +74,7 @@ export const emptyVehicleDetails = () => ({
   account_bank_name: "",
   engine_number: "",
   chassis_number: "",
-  ac_type: "",
+  ac_type: "AC",
   gps_installed: "0",
   gps_imei: "",
   gps_vendor: "",
@@ -83,9 +84,9 @@ export const emptyVehicleDetails = () => ({
   puc_expiry: "",
   tax_expiry: "",
   permit_expiry: "",
-  form_42_47_expiry: "",
   form_49_expiry: "",
   notes: "",
+  rc_preview_url: "",
 });
 
 export function detailsFromVehicleRow(row = {}) {
@@ -95,7 +96,11 @@ export function detailsFromVehicleRow(row = {}) {
       d.gps_installed = row.gps_installed ? "1" : "0";
       continue;
     }
-    if (k.endsWith("_expiry") || k === "attach_date" || k === "registration_date") {
+    if (k === "rc_preview_url") {
+      d.rc_preview_url = "";
+      continue;
+    }
+    if (k.endsWith("_expiry") || k === "attach_date" || k === "registration_date" || k === "registered_date") {
       d[k] = row[k] ? String(row[k]).slice(0, 10) : "";
       continue;
     }
@@ -103,7 +108,15 @@ export function detailsFromVehicleRow(row = {}) {
       d[k] = row[k] != null && row[k] !== "" ? String(row[k]) : "";
       continue;
     }
+    if (k === "ac_type") {
+      d.ac_type = row.ac_type ? String(row.ac_type) : "AC";
+      continue;
+    }
     d[k] = row[k] != null ? String(row[k]) : "";
+  }
+  // Induction date always defaults to today when empty
+  if (!d.registration_date) {
+    d.registration_date = new Date().toISOString().slice(0, 10);
   }
   return d;
 }
@@ -134,11 +147,17 @@ export function detailsPayload(form) {
       form.seating_capacity === "" || form.seating_capacity == null
         ? null
         : Number(form.seating_capacity),
-    registration_date: nullIfEmpty(form.registration_date),
-    manufacture_year:
-      form.manufacture_year === "" || form.manufacture_year == null
-        ? null
-        : Number(form.manufacture_year),
+    registration_date:
+      nullIfEmpty(form.registration_date) || new Date().toISOString().slice(0, 10),
+    registered_date: nullIfEmpty(form.registered_date),
+    manufacture_year: (() => {
+      if (form.registered_date) {
+        const y = Number(String(form.registered_date).slice(0, 4));
+        return Number.isFinite(y) ? y : null;
+      }
+      if (form.manufacture_year === "" || form.manufacture_year == null) return null;
+      return Number(form.manufacture_year);
+    })(),
     attach_date: nullIfEmpty(form.attach_date),
     sub_vendor: nullIfEmpty(form.sub_vendor),
     sub_vendor_phone: nullIfEmpty(form.sub_vendor_phone),
@@ -150,7 +169,7 @@ export function detailsPayload(form) {
     account_bank_name: nullIfEmpty(form.account_bank_name),
     engine_number: nullIfEmpty(form.engine_number),
     chassis_number: nullIfEmpty(form.chassis_number),
-    ac_type: nullIfEmpty(form.ac_type),
+    ac_type: nullIfEmpty(form.ac_type) || "AC",
     gps_installed: form.gps_installed === "1" || form.gps_installed === true || form.gps_installed === 1,
     gps_imei: nullIfEmpty(form.gps_imei),
     gps_vendor: nullIfEmpty(form.gps_vendor),
@@ -161,7 +180,6 @@ export function detailsPayload(form) {
     puc_expiry: nullIfEmpty(form.puc_expiry),
     tax_expiry: nullIfEmpty(form.tax_expiry),
     permit_expiry: nullIfEmpty(form.permit_expiry),
-    form_42_47_expiry: nullIfEmpty(form.form_42_47_expiry),
     form_49_expiry: nullIfEmpty(form.form_49_expiry),
     notes: nullIfEmpty(form.notes),
   };

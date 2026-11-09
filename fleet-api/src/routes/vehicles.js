@@ -118,11 +118,12 @@ const VEHICLE_STRING_FIELDS = [
   "form_49_expiry",
   "attach_date",
   "registration_date",
+  "registered_date",
   "notes",
 ];
 
 const VEHICLE_INSERT_COLS = `owner_name, owner_phone, driver_name, driver_phone, ownership, make_model, vehicle_type_id, fuel_type,
-  seating_capacity, registration_date, manufacture_year, attach_date, sub_vendor, sub_vendor_phone,
+  seating_capacity, registration_date, registered_date, manufacture_year, attach_date, sub_vendor, sub_vendor_phone,
   contractual_name, contractual_phone, account_holder_name, account_number, account_ifsc, account_bank_name,
   engine_number, chassis_number, ac_type,
   gps_installed, gps_imei, gps_vendor, gps_vendor_id,
@@ -140,6 +141,7 @@ function vehicleFieldValues(f, typeRes) {
     f.fuel_type,
     f.seating_capacity,
     f.registration_date,
+    f.registered_date,
     f.manufacture_year,
     f.attach_date,
     f.sub_vendor,
@@ -187,6 +189,7 @@ function pickVehicleFields(body, existing = {}) {
     fuel_type: existing.fuel_type ?? null,
     seating_capacity: existing.seating_capacity ?? null,
     registration_date: existing.registration_date ?? null,
+    registered_date: existing.registered_date ?? null,
     manufacture_year: existing.manufacture_year ?? null,
     attach_date: existing.attach_date ?? null,
     sub_vendor: existing.sub_vendor ?? null,
@@ -388,7 +391,7 @@ admin.post("/", async (req, res) => {
     `INSERT INTO vehicles (
       client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'approved', ?)`,
     [cid, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), f.is_active, f.notes]
   );
   const vid = result.insertId;
@@ -436,7 +439,7 @@ admin.patch("/:id", async (req, res) => {
   await execute(
     `UPDATE vehicles SET client_id=?, registration_number=?,
       owner_name=?, owner_phone=?, driver_name=?, driver_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?, sub_vendor_phone=?,
+      seating_capacity=?, registration_date=?, registered_date=?, manufacture_year=?, attach_date=?, sub_vendor=?, sub_vendor_phone=?,
       contractual_name=?, contractual_phone=?, account_holder_name=?, account_number=?, account_ifsc=?, account_bank_name=?,
       engine_number=?, chassis_number=?, ac_type=?,
       gps_installed=?, gps_imei=?, gps_vendor=?, gps_vendor_id=?,
@@ -601,7 +604,7 @@ sm.post("/", async (req, res) => {
     `INSERT INTO vehicles (
       client_id, registration_number, vehicle_serial, ${VEHICLE_INSERT_COLS},
       is_active, approval_status, submitted_by_site_manager_id, notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'draft',?,?)`,
     [smRow.client_id, reg, serialRes.serial, ...vehicleFieldValues(f, typeRes), smRow.id, f.notes]
   );
   res.status(201).json(
@@ -651,7 +654,7 @@ sm.patch("/:id", async (req, res) => {
   await execute(
     `UPDATE vehicles SET registration_number=?,
       owner_name=?, owner_phone=?, driver_name=?, driver_phone=?, ownership=?, make_model=?, vehicle_type_id=?, fuel_type=?,
-      seating_capacity=?, registration_date=?, manufacture_year=?, attach_date=?, sub_vendor=?, sub_vendor_phone=?,
+      seating_capacity=?, registration_date=?, registered_date=?, manufacture_year=?, attach_date=?, sub_vendor=?, sub_vendor_phone=?,
       contractual_name=?, contractual_phone=?, account_holder_name=?, account_number=?, account_ifsc=?, account_bank_name=?,
       engine_number=?, chassis_number=?, ac_type=?,
       gps_installed=?, gps_imei=?, gps_vendor=?, gps_vendor_id=?,
@@ -719,10 +722,6 @@ sm.post("/:id/documents", uploadDoc.single("file"), async (req, res) => {
   const vehicleDateCol = DOC_TYPE_VEHICLE_DATE[docType];
   if (vehicleDateCol && expiry) {
     await execute(`UPDATE vehicles SET ${vehicleDateCol} = ? WHERE id = ?`, [expiry, existing.id]);
-    // Permit upload also fills Fleetbook 42/47 expiry when present
-    if (docType === "PERMIT") {
-      await execute(`UPDATE vehicles SET form_42_47_expiry = ? WHERE id = ?`, [expiry, existing.id]);
-    }
   }
 
   if (existing.approval_status === "rejected") {

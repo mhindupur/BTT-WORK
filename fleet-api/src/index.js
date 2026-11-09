@@ -21,6 +21,7 @@ import smDashboard from "./routes/smDashboard.js";
 import amSites from "./routes/amSites.js";
 import { driversAdmin, driversSm } from "./routes/drivers.js";
 import expiryReminders from "./routes/expiryReminders.js";
+import ifsc from "./routes/ifsc.js";
 import { startExpiryReminderScheduler } from "./services/expiryReminders.js";
 
 const app = express();
@@ -63,6 +64,7 @@ app.use("/api/sm/dashboard", smDashboard);
 app.use("/api/admin/drivers", driversAdmin);
 app.use("/api/sm/drivers", driversSm);
 app.use("/api/admin/expiry-reminders", expiryReminders);
+app.use("/api/ifsc", ifsc);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

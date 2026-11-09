@@ -7,7 +7,7 @@ export const VEHICLE_EXPIRY_DOCS = [
   { docType: "PUC", label: "PUC / Pollution certificate", column: "puc_expiry" },
   { docType: "TAX", label: "Road tax", column: "tax_expiry" },
   { docType: "PERMIT", label: "Permit", column: "permit_expiry" },
-  { docType: "FORM_42_47", label: "Form 42 / 47", column: "form_42_47_expiry" },
+  // Form 42/47 removed from product UI — same as Permit
   { docType: "FORM_49", label: "Form 49", column: "form_49_expiry" },
 ];
 

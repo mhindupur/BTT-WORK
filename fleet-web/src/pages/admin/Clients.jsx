@@ -199,11 +199,13 @@ export default function AdminClients() {
       />
       <input
         className="border rounded-lg px-3 py-2 font-mono uppercase"
-        placeholder="Site code * (5 chars)"
-        maxLength={5}
+        placeholder="Site code * (min 8 alphanumeric — SM login)"
+        minLength={8}
+        maxLength={32}
         value={value.site_code}
         onChange={(e) => setValue({ ...value, site_code: formatSiteCodeInput(e.target.value) })}
         required
+        title="Used as Site Manager login. Letters and numbers only, minimum 8 characters."
       />
       <select
         className="border rounded-lg px-3 py-2 bg-white md:col-span-2"
@@ -296,16 +298,10 @@ export default function AdminClients() {
       <input
         className="border rounded-lg px-3 py-2"
         type="email"
-        placeholder="Site manager email *"
+        placeholder="Site manager email (optional — for notifications)"
         value={value.sm_email}
         onChange={(e) => setValue({ ...value, sm_email: e.target.value })}
-        required
-        disabled={!createMode && Boolean(value.sm_email) && !value._allowSmEmailEdit}
-        title={
-          !createMode && value.sm_email && !value._allowSmEmailEdit
-            ? "Login email cannot be changed here"
-            : undefined
-        }
+        title="Optional. Site Manager signs in with Site code, not email."
       />
       <input
         className="border rounded-lg px-3 py-2"
@@ -341,7 +337,8 @@ export default function AdminClients() {
           <h1 className="text-2xl font-bold text-btt-navy">Sites</h1>
           <p className="text-sm text-slate-600 mt-1">
             All sites are listed below. Use <strong>Add site</strong> when you need to create a site with
-            its site manager and optional account manager.
+            its site manager and optional account manager. Site code (min 8 alphanumeric) is the Site
+            Manager login; email is optional for notifications only.
           </p>
         </div>
         <button

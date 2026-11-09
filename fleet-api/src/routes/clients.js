@@ -20,7 +20,7 @@ const CLIENT_COLS = `c.id, c.name, c.site_code, c.email, c.phone, c.address, c.l
   (SELECT sm.id FROM site_managers sm WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_id,
   (SELECT u.full_name FROM site_managers sm JOIN users u ON u.id = sm.user_id
     WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_name,
-  (SELECT u.email FROM site_managers sm JOIN users u ON u.id = sm.user_id
+  (SELECT sm.notification_email FROM site_managers sm
     WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_email,
   (SELECT u.phone FROM site_managers sm JOIN users u ON u.id = sm.user_id
     WHERE sm.client_id = c.id ORDER BY sm.id ASC LIMIT 1) AS site_manager_phone,
@@ -121,36 +121,51 @@ async function syncAccountManagers(clientId, userIds) {
   }
 }
 
-async function createSiteManagerForClient(clientId, sm) {
-  if (!sm.email || !sm.full_name) {
-    return { error: "site_manager.email and site_manager.full_name required", status: 400 };
+async function createSiteManagerForClient(clientId, sm, siteCode) {
+  const loginCode = String(siteCode || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  if (!loginCode || loginCode.length < 8) {
+    return { error: "site_code required for Site Manager login (min 8 alphanumeric)", status: 400 };
+  }
+  if (!sm.full_name) {
+    return { error: "site_manager.full_name required", status: 400 };
   }
   if (!sm.password || sm.password.length < 6) {
     return { error: "site_manager.password required (min 6 characters)", status: 400 };
   }
-  const exists = await queryOne("SELECT id FROM users WHERE email = ?", [sm.email]);
-  if (exists) return { error: "Site manager email already in use", status: 409 };
+  // Optional notification email; login is site_code (stored lowercase in users.email for uniqueness)
+  const notifyEmail = sm.email ? String(sm.email).trim().toLowerCase() : null;
+  if (notifyEmail) {
+    const exists = await queryOne("SELECT id FROM users WHERE email = ?", [notifyEmail]);
+    if (exists) return { error: "Site manager email already in use", status: 409 };
+  }
+  const loginKey = loginCode.toLowerCase();
+  const loginTaken = await queryOne("SELECT id FROM users WHERE email = ?", [loginKey]);
+  if (loginTaken) return { error: "Site code already used as a login", status: 409 };
+
   const hash = await bcrypt.hash(sm.password, 10);
+  // users.email holds site_code login (lowercase). Optional notify email on site_managers.notification_email.
   const ures = await execute(
     "INSERT INTO users (email, password_hash, role, full_name, phone) VALUES (?,?,?,?,?)",
-    [sm.email, hash, "site_manager", sm.full_name, sm.phone]
+    [loginKey, hash, "site_manager", sm.full_name, sm.phone]
   );
-  await execute("INSERT INTO site_managers (user_id, client_id, location_label) VALUES (?,?,?)", [
-    ures.insertId,
-    clientId,
-    sm.location_label,
-  ]);
+  await execute(
+    "INSERT INTO site_managers (user_id, client_id, location_label, notification_email) VALUES (?,?,?,?)",
+    [ures.insertId, clientId, sm.location_label, notifyEmail]
+  );
   return { ok: true, user_id: ures.insertId };
 }
 
-async function updatePrimarySiteManager(clientId, sm) {
+async function updatePrimarySiteManager(clientId, sm, siteCode) {
   const existing = await queryOne(
     "SELECT sm.id, sm.user_id FROM site_managers sm WHERE sm.client_id = ? ORDER BY sm.id ASC LIMIT 1",
     [clientId]
   );
   if (!existing) {
     if (!sm) return null;
-    return createSiteManagerForClient(clientId, sm);
+    return createSiteManagerForClient(clientId, sm, siteCode);
   }
   if (!sm) return null;
   if (sm.full_name || sm.phone != null) {
@@ -165,6 +180,11 @@ async function updatePrimarySiteManager(clientId, sm) {
       existing.id,
     ]);
   }
+  // Optional notification email (login remains site_code)
+  await execute("UPDATE site_managers SET notification_email = ? WHERE id = ?", [
+    sm.email ? String(sm.email).trim().toLowerCase() : null,
+    existing.id,
+  ]);
   if (sm.password && sm.password.length >= 6) {
     const hash = await bcrypt.hash(sm.password, 10);
     await execute("UPDATE users SET password_hash = ? WHERE id = ?", [hash, existing.user_id]);
@@ -191,7 +211,9 @@ r.post("/", async (req, res) => {
   const f = pickClientFields(body);
   if (!f.name) return res.status(400).json({ error: "name required" });
   if (!f.site_code) {
-    return res.status(400).json({ error: "site_code required — exactly 5 letters/digits, e.g. INFNG" });
+    return res.status(400).json({
+      error: "site_code required — min 8 letters/digits (alphanumeric), used as Site Manager login",
+    });
   }
   const clash = await queryOne("SELECT id FROM clients WHERE site_code = ?", [f.site_code]);
   if (clash) return res.status(409).json({ error: "Site code already in use" });
@@ -203,7 +225,7 @@ r.post("/", async (req, res) => {
   const sm = pickSiteManager(body);
   if (!sm) {
     return res.status(400).json({
-      error: "site_manager required — email, full_name, password (min 6)",
+      error: "site_manager required — full_name, password (min 6); email optional",
     });
   }
 
@@ -213,7 +235,7 @@ r.post("/", async (req, res) => {
     [
       f.name,
       f.site_code,
-      f.email,
+      f.email || sm.email || null,
       f.phone,
       f.address,
       f.latitude,
@@ -226,7 +248,7 @@ r.post("/", async (req, res) => {
   const clientId = result.insertId;
   if (amIds.length) await syncAccountManagers(clientId, amIds);
 
-  const smRes = await createSiteManagerForClient(clientId, sm);
+  const smRes = await createSiteManagerForClient(clientId, sm, f.site_code);
   if (smRes.error) {
     await execute("DELETE FROM clients WHERE id = ?", [clientId]);
     return res.status(smRes.status).json({ error: smRes.error });
@@ -244,7 +266,9 @@ r.patch("/:id", async (req, res) => {
   const f = pickClientFields(body, existing);
   if (!f.name) return res.status(400).json({ error: "name required" });
   if (!f.site_code) {
-    return res.status(400).json({ error: "site_code required — exactly 5 letters/digits, e.g. INFNG" });
+    return res.status(400).json({
+      error: "site_code required — min 8 letters/digits (alphanumeric), used as Site Manager login",
+    });
   }
   const clash = await queryOne("SELECT id FROM clients WHERE site_code = ? AND id <> ?", [
     f.site_code,
@@ -277,9 +301,26 @@ r.patch("/:id", async (req, res) => {
   );
   if (amIds) await syncAccountManagers(existing.id, amIds);
 
+  // Keep Site Manager login in sync with site_code
+  if (f.site_code && f.site_code !== existing.site_code) {
+    const smRow = await queryOne(
+      "SELECT user_id FROM site_managers WHERE client_id = ? ORDER BY id ASC LIMIT 1",
+      [existing.id]
+    );
+    if (smRow) {
+      const loginKey = String(f.site_code).toLowerCase();
+      const taken = await queryOne("SELECT id FROM users WHERE email = ? AND id <> ?", [
+        loginKey,
+        smRow.user_id,
+      ]);
+      if (taken) return res.status(409).json({ error: "Site code already used as a login" });
+      await execute("UPDATE users SET email = ? WHERE id = ?", [loginKey, smRow.user_id]);
+    }
+  }
+
   const sm = pickSiteManager(body);
   if (sm) {
-    const smRes = await updatePrimarySiteManager(existing.id, sm);
+    const smRes = await updatePrimarySiteManager(existing.id, sm, f.site_code);
     if (smRes?.error) return res.status(smRes.status).json({ error: smRes.error });
   }
 

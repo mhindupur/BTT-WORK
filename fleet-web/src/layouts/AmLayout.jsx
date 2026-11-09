@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import BrandMark from "../components/BrandMark";
 import { useAuth } from "../authContext";
@@ -62,20 +63,33 @@ const NAV = [
 ];
 
 const linkCls = ({ isActive }) =>
-  `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
+  `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition whitespace-nowrap ${
     isActive ? "bg-white/15 font-medium text-white shadow-sm" : "text-slate-200/90 hover:bg-white/8 hover:text-white"
   }`;
 
 export default function AmLayout() {
   const { user, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div className="h-[100dvh] min-h-0 flex overflow-hidden">
-      <aside className="w-60 bg-btt-navy text-slate-100 flex flex-col shrink-0 h-full">
-        <div className="p-3 border-b border-white/10 shrink-0 bg-white">
-          <BrandMark variant="compact" />
-          <div className="mt-1 text-[11px] font-semibold text-btt-navy/80">Account Manager</div>
+    <div className="h-[100dvh] min-h-0 flex flex-col md:flex-row overflow-hidden">
+      <aside className="w-full md:w-60 bg-btt-navy text-slate-100 flex flex-col md:shrink-0 md:h-full border-b md:border-b-0">
+        <div className="p-3 border-b border-white/10 shrink-0 bg-white flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <BrandMark variant="compact" />
+            <div className="mt-1 text-[11px] font-semibold text-btt-navy/80">Account Manager</div>
+          </div>
+          <button
+            type="button"
+            className="md:hidden px-3 py-1.5 rounded-lg border text-xs font-semibold text-btt-navy"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            {menuOpen ? "Close" : "Menu"}
+          </button>
         </div>
-        <nav className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">
+        <nav
+          className={`${menuOpen ? "flex" : "hidden"} md:flex p-2 flex-row md:flex-col gap-1 overflow-x-auto md:overflow-y-auto md:flex-1 min-h-0`}
+          onClick={() => setMenuOpen(false)}
+        >
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={linkCls}>
               {item.icon}
@@ -83,15 +97,21 @@ export default function AmLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="shrink-0 p-4 text-xs border-t border-white/10 bg-btt-blueDark">
+        <div className="hidden md:block shrink-0 p-4 text-xs border-t border-white/10 bg-btt-blueDark">
           <div className="truncate opacity-80">{user?.full_name || user?.email}</div>
           <div className="truncate opacity-60">View only</div>
           <button type="button" onClick={logout} className="mt-2 text-btt-mist hover:underline">
             Log out
           </button>
         </div>
+        <div className="md:hidden shrink-0 px-3 py-2 text-xs border-t border-white/10 flex items-center justify-between gap-2">
+          <span className="truncate opacity-80">{user?.full_name || user?.email}</span>
+          <button type="button" onClick={logout} className="text-btt-mist underline shrink-0">
+            Log out
+          </button>
+        </div>
       </aside>
-      <main className="flex-1 p-6 overflow-auto min-h-0 min-w-0 bg-btt-soft">
+      <main className="flex-1 p-4 sm:p-6 overflow-auto min-h-0 min-w-0 bg-btt-soft">
         <Outlet />
       </main>
     </div>

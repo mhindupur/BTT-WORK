@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import api from "../api";
 import {
   AC_TYPE_OPTIONS,
   FUEL_TYPE_OPTIONS,
@@ -9,6 +11,10 @@ import {
 
 const inputCls = "w-full border rounded-lg px-3 py-2 bg-white";
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function Labeled({ label, children, hint }) {
   return (
@@ -27,10 +33,81 @@ function typeLabel(t) {
 }
 
 function AccountFields({ value, set, title }) {
+  const [ifscMsg, setIfscMsg] = useState("");
+  const [ifscBusy, setIfscBusy] = useState(false);
+
+  async function verifyIfsc() {
+    const code = String(value.account_ifsc || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+      setIfscMsg("Enter a valid 11-character IFSC first");
+      return;
+    }
+    setIfscBusy(true);
+    setIfscMsg("");
+    try {
+      const { data } = await api.get(`/ifsc/${code}`);
+      set({
+        account_ifsc: code,
+        account_bank_name: data.BANK || data.bank || data.bank_name || value.account_bank_name || "",
+        account_holder_name: value.account_holder_name || "",
+        // branch/city available in response for display; bank name is primary fill
+      });
+      const branch = data.BRANCH || data.branch || "";
+      const city = data.CITY || data.city || "";
+      setIfscMsg(
+        [data.BANK || data.bank, branch, city].filter(Boolean).join(" · ") || "IFSC verified"
+      );
+    } catch (e) {
+      setIfscMsg(e?.response?.data?.error || e.message || "IFSC verification failed");
+    } finally {
+      setIfscBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="text-sm font-bold text-btt-navy mb-2">{title}</div>
       <div className="grid md:grid-cols-2 gap-3">
+        <div className="md:col-span-2">
+          <Labeled label="IFSC code *">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                className={`${inputCls} font-mono uppercase flex-1`}
+                value={value.account_ifsc || ""}
+                onChange={(e) => {
+                  setIfscMsg("");
+                  set({
+                    account_ifsc: e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, "")
+                      .slice(0, 11),
+                  });
+                }}
+                placeholder="e.g. HDFC0001234"
+                maxLength={11}
+              />
+              <button
+                type="button"
+                onClick={verifyIfsc}
+                disabled={ifscBusy}
+                className="px-4 py-2 rounded-lg bg-btt-navy text-white text-sm font-semibold whitespace-nowrap disabled:opacity-60"
+              >
+                {ifscBusy ? "Verifying…" : "Verify IFSC"}
+              </button>
+            </div>
+          </Labeled>
+          {ifscMsg ? <p className="mt-1 text-xs text-slate-600">{ifscMsg}</p> : null}
+        </div>
+        <Labeled label="Bank name">
+          <input
+            className={inputCls}
+            value={value.account_bank_name || ""}
+            onChange={(e) => set({ account_bank_name: e.target.value })}
+            placeholder="Filled after IFSC verify"
+          />
+        </Labeled>
         <Labeled label="Account holder name">
           <input
             className={inputCls}
@@ -48,30 +125,14 @@ function AccountFields({ value, set, title }) {
             inputMode="numeric"
           />
         </Labeled>
-        <Labeled label="IFSC">
-          <input
-            className={`${inputCls} font-mono uppercase`}
-            value={value.account_ifsc || ""}
-            onChange={(e) => set({ account_ifsc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11) })}
-            placeholder="e.g. HDFC0001234"
-          />
-        </Labeled>
-        <Labeled label="Bank name">
-          <input
-            className={inputCls}
-            value={value.account_bank_name || ""}
-            onChange={(e) => set({ account_bank_name: e.target.value })}
-            placeholder="Bank name"
-          />
-        </Labeled>
       </div>
     </div>
   );
 }
 
 /**
- * Fleetbook-style vehicle information fields (ownership, chassis, GPS, expiries…).
- * `value` / `onChange` work like a controlled form slice.
+ * Fleet vehicle information fields.
+ * Order: Vehicle → Driver/ownership → Banking → Technical
  */
 export default function VehicleInfoFields({
   value,
@@ -81,6 +142,7 @@ export default function VehicleInfoFields({
   showVehicleType = true,
   showStatus = true,
   showExpirySection = true,
+  showRcUpload = true,
   dense = false,
 }) {
   const set = (patch) => onChange({ ...value, ...patch });
@@ -94,6 +156,18 @@ export default function VehicleInfoFields({
   const showSubVendor = ownership === "SUB_VENDOR";
   const showContractual = ownership === "CONTRACTUAL";
   const showAccount = Boolean(ownership);
+
+  // Induction date always today (non-editable)
+  useEffect(() => {
+    const today = todayISO();
+    if (value.registration_date !== today) {
+      set({ registration_date: today });
+    }
+    if (!value.ac_type) {
+      set({ ac_type: "AC" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function onVehicleTypeChange(rawId) {
     const patch = { vehicle_type_id: rawId };
@@ -112,9 +186,6 @@ export default function VehicleInfoFields({
     if (next === "DRIVER_OWNER") {
       patch.driver_name = value.owner_name || "";
       patch.driver_phone = value.owner_phone || "";
-    }
-    if (next !== "SUB_VENDOR") {
-      // keep existing values but UI hides them
     }
     set(patch);
   }
@@ -153,7 +224,15 @@ export default function VehicleInfoFields({
     });
   }
 
-  // Ownership options sit under this header (per layout), above name/mobile fields.
+  function onRcFile(file) {
+    if (!file) {
+      set({ rc_preview_url: "", rc_file: null });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    set({ rc_preview_url: url, rc_file: file });
+  }
+
   const partySectionTitle =
     !ownership || isDriverOwner
       ? "Driver / Owner details"
@@ -163,120 +242,132 @@ export default function VehicleInfoFields({
           ? "Contractual details"
           : "Ownership";
 
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="text-sm font-bold text-btt-navy mb-2">Vehicle information</div>
-        <div className={grid}>
-          {showVehicleType ? (
-            <Labeled label="Model / type">
-              <select
-                className={inputCls}
-                value={value.vehicle_type_id || ""}
-                onChange={(e) => onVehicleTypeChange(e.target.value)}
-              >
-                <option value="">Select type</option>
-                {vehicleTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {typeLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </Labeled>
-          ) : null}
-          <Labeled label="Manufacture year">
-            <input
-              className={inputCls}
-              type="number"
-              min={1980}
-              max={2100}
-              placeholder="e.g. 2025"
-              value={value.manufacture_year || ""}
-              onChange={(e) => set({ manufacture_year: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-            />
-          </Labeled>
-          <Labeled label="Fuel type">
+  const vehicleBlock = (
+    <div>
+      <div className="text-sm font-bold text-btt-navy mb-2">Vehicle information</div>
+      <div className={grid}>
+        {showVehicleType ? (
+          <Labeled label="Model / type">
             <select
               className={inputCls}
-              value={value.fuel_type || ""}
-              onChange={(e) => set({ fuel_type: e.target.value })}
+              value={value.vehicle_type_id || ""}
+              onChange={(e) => onVehicleTypeChange(e.target.value)}
             >
-              <option value="">Select</option>
-              {FUEL_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
+              <option value="">Select type</option>
+              {vehicleTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {typeLabel(t)}
                 </option>
               ))}
             </select>
           </Labeled>
-          <Labeled label="No. of passengers">
+        ) : null}
+        <Labeled label="Registered date">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.registered_date || ""}
+            onChange={(e) => {
+              const d = e.target.value;
+              const y = d ? Number(d.slice(0, 4)) : "";
+              set({ registered_date: d, manufacture_year: y ? String(y) : "" });
+            }}
+          />
+        </Labeled>
+        <Labeled label="Fuel type">
+          <select
+            className={inputCls}
+            value={value.fuel_type || ""}
+            onChange={(e) => set({ fuel_type: e.target.value })}
+          >
+            <option value="">Select</option>
+            {FUEL_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+        <Labeled label="No. of passengers">
+          <select
+            className={inputCls}
+            value={value.seating_capacity || ""}
+            onChange={(e) => set({ seating_capacity: e.target.value })}
+          >
+            <option value="">Select</option>
+            {SEATING_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+        <Labeled label="Induction date" hint="Set to today and locked">
+          <input
+            className={`${inputCls} bg-slate-100 text-slate-600`}
+            type="date"
+            value={value.registration_date || todayISO()}
+            readOnly
+            disabled
+          />
+        </Labeled>
+        <Labeled label="AC / Non-AC">
+          <select
+            className={inputCls}
+            value={value.ac_type || "AC"}
+            onChange={(e) => set({ ac_type: e.target.value })}
+          >
+            {AC_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+        <Labeled label="Attach date">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.attach_date || ""}
+            onChange={(e) => set({ attach_date: e.target.value })}
+          />
+        </Labeled>
+        {showStatus ? (
+          <Labeled label="Status (active)">
             <select
               className={inputCls}
-              value={value.seating_capacity || ""}
-              onChange={(e) => set({ seating_capacity: e.target.value })}
+              value={value.is_active === false || value.is_active === 0 || value.is_active === "0" ? "0" : "1"}
+              onChange={(e) => set({ is_active: e.target.value === "1" })}
             >
-              <option value="">Select</option>
-              {SEATING_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
+              <option value="1">Active (A)</option>
+              <option value="0">Inactive</option>
             </select>
           </Labeled>
-          <Labeled label="Induction date">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.registration_date || ""}
-              onChange={(e) => set({ registration_date: e.target.value })}
-            />
-          </Labeled>
-          <Labeled label="AC / Non-AC">
-            <select
-              className={inputCls}
-              value={value.ac_type || ""}
-              onChange={(e) => set({ ac_type: e.target.value })}
-            >
-              <option value="">Select</option>
-              {AC_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </Labeled>
-          <Labeled label="Attach date">
-            <input
-              className={inputCls}
-              type="date"
-              value={value.attach_date || ""}
-              onChange={(e) => set({ attach_date: e.target.value })}
-            />
-          </Labeled>
-          {showStatus ? (
-            <Labeled label="Status (active)">
-              <select
-                className={inputCls}
-                value={value.is_active === false || value.is_active === 0 || value.is_active === "0" ? "0" : "1"}
-                onChange={(e) => set({ is_active: e.target.value === "1" })}
-              >
-                <option value="1">Active (A)</option>
-                <option value="0">Inactive</option>
-              </select>
-            </Labeled>
-          ) : null}
-        </div>
+        ) : null}
       </div>
 
+      {showRcUpload ? (
+        <div className="mt-4">
+          <Labeled label="Upload RC Book" hint="Preview opens on the right — use it to copy engine / chassis details">
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              className="block w-full text-sm"
+              onChange={(e) => onRcFile(e.target.files?.[0] || null)}
+            />
+          </Labeled>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const driverBlock = (
+    <>
       <div>
         <div className="text-sm font-bold text-btt-navy mb-2">{partySectionTitle}</div>
         <div className="mb-3">
           <div className={labelCls}>Ownership type *</div>
-          <div
-            className="grid grid-cols-2 lg:grid-cols-4 gap-2"
-            role="radiogroup"
-            aria-label="Ownership type"
-          >
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="radiogroup" aria-label="Ownership type">
             {OWNERSHIP_OPTIONS.map((o) => {
               const selected = ownership === o.value;
               return (
@@ -330,9 +421,6 @@ export default function VehicleInfoFields({
                 inputMode="numeric"
               />
             </Labeled>
-            <p className="text-xs text-slate-500 md:col-span-1 self-end pb-2">
-              Owner and driver are the same person for this ownership type.
-            </p>
           </div>
         ) : null}
       </div>
@@ -436,125 +524,130 @@ export default function VehicleInfoFields({
           </div>
         </div>
       ) : null}
+    </>
+  );
 
-      {showAccount ? <AccountFields value={value} set={set} title={accountSectionTitle(ownership)} /> : null}
+  const bankingBlock = showAccount ? (
+    <AccountFields value={value} set={set} title={accountSectionTitle(ownership)} />
+  ) : null;
 
-      <div>
-        <div className="text-sm font-bold text-btt-navy mb-2">Technical & GPS</div>
-        <div className={grid}>
-          <Labeled label="Engine number">
-            <input
-              className={`${inputCls} font-mono uppercase`}
-              value={value.engine_number || ""}
-              onChange={(e) => set({ engine_number: e.target.value.toUpperCase() })}
-            />
-          </Labeled>
-          <Labeled label="Chassis number">
-            <input
-              className={`${inputCls} font-mono uppercase`}
-              value={value.chassis_number || ""}
-              onChange={(e) => set({ chassis_number: e.target.value.toUpperCase() })}
-            />
-          </Labeled>
-          <Labeled label="GPS">
-            <select className={inputCls} value={gpsOn ? "1" : "0"} onChange={(e) => onGpsChange(e.target.value)}>
-              {GPS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </Labeled>
-          <Labeled label="GPS IMEI no">
-            <input
-              className={`${inputCls} font-mono`}
-              value={value.gps_imei || ""}
-              onChange={(e) => set({ gps_imei: e.target.value })}
-              disabled={!gpsOn}
-            />
-          </Labeled>
-          <Labeled label="GPS type / vendor">
-            <select
-              className={inputCls}
-              value={value.gps_vendor_id || ""}
-              onChange={(e) => onGpsVendorChange(e.target.value)}
-              disabled={!gpsOn}
-            >
-              <option value="">Select GPS type</option>
-              {gpsVendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </Labeled>
-        </div>
+  const technicalBlock = (
+    <div>
+      <div className="text-sm font-bold text-btt-navy mb-2">Technical & GPS</div>
+      <div className={grid}>
+        <Labeled label="Engine number">
+          <input
+            className={`${inputCls} font-mono uppercase`}
+            value={value.engine_number || ""}
+            onChange={(e) => set({ engine_number: e.target.value.toUpperCase() })}
+          />
+        </Labeled>
+        <Labeled label="Chassis number">
+          <input
+            className={`${inputCls} font-mono uppercase`}
+            value={value.chassis_number || ""}
+            onChange={(e) => set({ chassis_number: e.target.value.toUpperCase() })}
+          />
+        </Labeled>
+        <Labeled label="GPS">
+          <select className={inputCls} value={gpsOn ? "1" : "0"} onChange={(e) => onGpsChange(e.target.value)}>
+            {GPS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+        <Labeled label="GPS IMEI no">
+          <input
+            className={`${inputCls} font-mono`}
+            value={value.gps_imei || ""}
+            onChange={(e) => set({ gps_imei: e.target.value })}
+            disabled={!gpsOn}
+          />
+        </Labeled>
+        <Labeled label="GPS type / vendor">
+          <select
+            className={inputCls}
+            value={value.gps_vendor_id || ""}
+            onChange={(e) => onGpsVendorChange(e.target.value)}
+            disabled={!gpsOn}
+          >
+            <option value="">Select GPS type</option>
+            {gpsVendors.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </Labeled>
       </div>
+    </div>
+  );
 
-      {showExpirySection ? (
-        <div>
-          <div className="text-sm font-bold text-btt-navy mb-2">Certificate & permit expiry</div>
-          <div className={grid}>
-            <Labeled label="Insurance expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.insurance_expiry || ""}
-                onChange={(e) => set({ insurance_expiry: e.target.value })}
-              />
-            </Labeled>
-            <Labeled label="Fitness certificate expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.fitness_expiry || ""}
-                onChange={(e) => set({ fitness_expiry: e.target.value })}
-              />
-            </Labeled>
-            <Labeled label="Pollution certificate expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.puc_expiry || ""}
-                onChange={(e) => set({ puc_expiry: e.target.value })}
-              />
-            </Labeled>
-            <Labeled label="42 / 47 expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.form_42_47_expiry || ""}
-                onChange={(e) => set({ form_42_47_expiry: e.target.value })}
-              />
-            </Labeled>
-            <Labeled label="49 expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.form_49_expiry || ""}
-                onChange={(e) => set({ form_49_expiry: e.target.value })}
-              />
-            </Labeled>
-            <Labeled label="Tax expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.tax_expiry || ""}
-                onChange={(e) => set({ tax_expiry: e.target.value })}
-              />
-            </Labeled>
-            <Labeled label="Permit expiry">
-              <input
-                className={inputCls}
-                type="date"
-                value={value.permit_expiry || ""}
-                onChange={(e) => set({ permit_expiry: e.target.value })}
-              />
-            </Labeled>
-          </div>
-        </div>
-      ) : null}
+  const expiryBlock = showExpirySection ? (
+    <div>
+      <div className="text-sm font-bold text-btt-navy mb-2">Certificate & permit expiry</div>
+      <div className={grid}>
+        <Labeled label="Insurance expiry">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.insurance_expiry || ""}
+            onChange={(e) => set({ insurance_expiry: e.target.value })}
+          />
+        </Labeled>
+        <Labeled label="Fitness certificate expiry">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.fitness_expiry || ""}
+            onChange={(e) => set({ fitness_expiry: e.target.value })}
+          />
+        </Labeled>
+        <Labeled label="Pollution certificate expiry">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.puc_expiry || ""}
+            onChange={(e) => set({ puc_expiry: e.target.value })}
+          />
+        </Labeled>
+        <Labeled label="49 expiry">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.form_49_expiry || ""}
+            onChange={(e) => set({ form_49_expiry: e.target.value })}
+          />
+        </Labeled>
+        <Labeled label="Tax expiry">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.tax_expiry || ""}
+            onChange={(e) => set({ tax_expiry: e.target.value })}
+          />
+        </Labeled>
+        <Labeled label="Permit expiry">
+          <input
+            className={inputCls}
+            type="date"
+            value={value.permit_expiry || ""}
+            onChange={(e) => set({ permit_expiry: e.target.value })}
+          />
+        </Labeled>
+      </div>
+    </div>
+  ) : null;
 
+  const formColumn = (
+    <div className="space-y-4 min-w-0">
+      {vehicleBlock}
+      {driverBlock}
+      {bankingBlock}
+      {technicalBlock}
+      {expiryBlock}
       <Labeled label="Notes (optional)">
         <input
           className={inputCls}
@@ -563,6 +656,35 @@ export default function VehicleInfoFields({
           placeholder="Notes"
         />
       </Labeled>
+    </div>
+  );
+
+  if (!showRcUpload) return formColumn;
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4 items-start">
+      {formColumn}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-h-[280px] lg:sticky lg:top-4">
+        <div className="text-sm font-bold text-btt-navy mb-2">RC Book preview</div>
+        <p className="text-xs text-slate-500 mb-3">
+          Upload RC on the left. Preview here to copy engine number, chassis number, and other details into the form.
+        </p>
+        {value.rc_preview_url ? (
+          String(value.rc_file?.type || "").includes("pdf") ? (
+            <iframe title="RC preview" src={value.rc_preview_url} className="w-full h-[70vh] rounded-lg bg-white border" />
+          ) : (
+            <img
+              src={value.rc_preview_url}
+              alt="RC Book preview"
+              className="w-full max-h-[70vh] object-contain rounded-lg bg-white border"
+            />
+          )
+        ) : (
+          <div className="h-48 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg">
+            No RC uploaded yet
+          </div>
+        )}
+      </div>
     </div>
   );
 }

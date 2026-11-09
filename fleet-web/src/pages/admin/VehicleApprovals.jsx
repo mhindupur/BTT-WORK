@@ -28,6 +28,7 @@ export default function AdminVehicleApprovals() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [docReject, setDocReject] = useState(null); // { id, note }
+  const [previewDoc, setPreviewDoc] = useState(null);
   const [search, setSearch] = useState("");
   const [approvalChart, setApprovalChart] = useState([]);
 
@@ -63,6 +64,7 @@ export default function AdminVehicleApprovals() {
     load().catch(console.error);
   }, []);
   useEffect(() => {
+    setPreviewDoc(null);
     loadDocs(selectedId).catch(console.error);
   }, [selectedId]);
 
@@ -376,94 +378,130 @@ export default function AdminVehicleApprovals() {
               <div className="font-semibold">{dateStr(selected.tax_expiry)}</div>
             </div>
             <div>
-              <span className="text-slate-500">42/47 expiry</span>
-              <div className="font-semibold">{dateStr(selected.form_42_47_expiry)}</div>
+              <span className="text-slate-500">Registered date</span>
+              <div className="font-semibold">{dateStr(selected.registered_date)}</div>
             </div>
             <div>
               <span className="text-slate-500">49 expiry</span>
               <div className="font-semibold">{dateStr(selected.form_49_expiry)}</div>
             </div>
+            <div>
+              <span className="text-slate-500">Permit expiry</span>
+              <div className="font-semibold">{dateStr(selected.permit_expiry)}</div>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            <h3 className="font-bold text-btt-navy">Documents checklist</h3>
-            {VEHICLE_DOC_SECTIONS.map((section) => {
-              const d = docsByType[section.type];
-              return (
-                <div
-                  key={section.type}
-                  className={`rounded-2xl border-2 p-4 ${
-                    !d
-                      ? section.optional
-                        ? "border-dashed border-slate-200 bg-white"
-                        : "border-slate-200 bg-slate-50"
-                      : d.status === "approved"
-                        ? "border-green-300 bg-green-50/50"
-                        : d.status === "rejected"
-                          ? "border-red-300 bg-red-50/40"
-                          : "border-amber-200 bg-amber-50/30"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-btt-navy">
-                        {section.title}
-                        {section.optional ? (
-                          <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
-                        ) : null}
-                      </div>
-                      <div className="text-xs text-slate-500">{section.short}</div>
-                      {d ? (
-                        <>
-                          <div className="text-sm mt-2 font-medium truncate max-w-xs sm:max-w-md">{d.original_filename}</div>
-                          <div className="text-xs mt-1 font-semibold text-slate-700">
-                            {DOC_STATUS_LABEL[d.status] || d.status}
-                            {d.expiry_date ? ` · expiry ${dateStr(d.expiry_date)}` : ""}
-                          </div>
-                          {d.rejection_note ? (
-                            <div className="text-xs text-red-700 mt-1">Note: {d.rejection_note}</div>
+          <div className="grid lg:grid-cols-2 gap-4 items-start">
+            <div className="space-y-3 min-w-0">
+              <h3 className="font-bold text-btt-navy">Documents checklist</h3>
+              {VEHICLE_DOC_SECTIONS.map((section) => {
+                const d = docsByType[section.type];
+                const active = previewDoc?.id === d?.id;
+                return (
+                  <div
+                    key={section.type}
+                    className={`rounded-2xl border-2 p-4 ${
+                      active
+                        ? "border-btt-blue bg-btt-sky/40"
+                        : !d
+                          ? section.optional
+                            ? "border-dashed border-slate-200 bg-white"
+                            : "border-slate-200 bg-slate-50"
+                          : d.status === "approved"
+                            ? "border-green-300 bg-green-50/50"
+                            : d.status === "rejected"
+                              ? "border-red-300 bg-red-50/40"
+                              : "border-amber-200 bg-amber-50/30"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-btt-navy">
+                          {section.title}
+                          {section.optional ? (
+                            <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
                           ) : null}
-                        </>
-                      ) : (
-                        <div className="text-sm text-slate-500 mt-2">
-                          {section.optional ? "Not uploaded (optional)" : "Not uploaded"}
+                        </div>
+                        <div className="text-xs text-slate-500">{section.short}</div>
+                        {d ? (
+                          <>
+                            <div className="text-sm mt-2 font-medium truncate max-w-xs sm:max-w-md">
+                              {d.original_filename}
+                            </div>
+                            <div className="text-xs mt-1 font-semibold text-slate-700">
+                              {DOC_STATUS_LABEL[d.status] || d.status}
+                              {d.expiry_date ? ` · expiry ${dateStr(d.expiry_date)}` : ""}
+                            </div>
+                            {d.rejection_note ? (
+                              <div className="text-xs text-red-700 mt-1">Note: {d.rejection_note}</div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <div className="text-sm text-slate-500 mt-2">
+                            {section.optional ? "Not uploaded (optional)" : "Not uploaded"}
+                          </div>
+                        )}
+                      </div>
+                      {d && (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="px-3 py-2 rounded-xl bg-white border text-sm font-semibold text-btt-navy"
+                            onClick={() => setPreviewDoc(d)}
+                          >
+                            Preview
+                          </button>
+                          {d.status === "pending" && (
+                            <>
+                              <button
+                                type="button"
+                                className="px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-semibold"
+                                onClick={() => approveDoc(d.id)}
+                              >
+                                Verify OK
+                              </button>
+                              <button
+                                type="button"
+                                className="px-3 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold"
+                                onClick={() => setDocReject({ id: d.id, note: "" })}
+                              >
+                                Reject doc
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
-                    {d && (
-                      <div className="flex flex-wrap gap-2">
-                        <a
-                          className="px-3 py-2 rounded-xl bg-white border text-sm font-semibold text-btt-navy"
-                          href={d.file_path}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open file
-                        </a>
-                        {d.status === "pending" && (
-                          <>
-                            <button
-                              type="button"
-                              className="px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-semibold"
-                              onClick={() => approveDoc(d.id)}
-                            >
-                              Verify OK
-                            </button>
-                            <button
-                              type="button"
-                              className="px-3 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold"
-                              onClick={() => setDocReject({ id: d.id, note: "" })}
-                            >
-                              Reject doc
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
                   </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 min-h-[320px] lg:sticky lg:top-4">
+              <div className="text-sm font-bold text-btt-navy mb-2">Document preview</div>
+              {previewDoc ? (
+                <>
+                  <div className="text-xs text-slate-600 mb-2 truncate">{previewDoc.original_filename}</div>
+                  {/\.pdf($|\?)/i.test(previewDoc.original_filename || previewDoc.file_path || "") ? (
+                    <iframe
+                      title="Document preview"
+                      src={previewDoc.file_path}
+                      className="w-full h-[70vh] rounded-lg bg-white border"
+                    />
+                  ) : (
+                    <img
+                      src={previewDoc.file_path}
+                      alt={previewDoc.original_filename || "Document"}
+                      className="w-full max-h-[70vh] object-contain rounded-lg bg-white border"
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="h-64 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg">
+                  Select <strong className="mx-1">Preview</strong> on a document
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
 
           <div>

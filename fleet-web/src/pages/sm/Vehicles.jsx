@@ -203,7 +203,18 @@ export default function SmVehicles() {
         vehicle_type_id: form.vehicle_type_id === "" ? null : Number(form.vehicle_type_id),
         ...detailsPayload(form),
       });
-      setMsg(`Vehicle ${data.registration_number} saved. Upload documents below.`);
+      // If RC was selected during add, upload it immediately for the approval packet
+      if (form.rc_file && data?.id) {
+        const fd = new FormData();
+        fd.append("file", form.rc_file);
+        fd.append("doc_type", "RC");
+        try {
+          await api.post(`/sm/vehicles/${data.id}/documents`, fd);
+        } catch (uploadEx) {
+          console.warn("RC auto-upload failed", uploadEx);
+        }
+      }
+      setMsg(`Vehicle ${data.registration_number} saved. Upload remaining documents below.`);
       setForm(emptyForm());
       setShowAdd(false);
       setSelectedId(data.id);

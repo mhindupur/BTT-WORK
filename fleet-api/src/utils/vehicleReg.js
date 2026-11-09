@@ -23,11 +23,12 @@ export function normalizeVehicleRegistration(input) {
   return `${m[1]}${m[2]}${m[3]}${n}`;
 }
 
+/** Site code: alphanumeric only, minimum 8 characters (also used as Site Manager login). */
 export function normalizeSiteCode(input) {
   const c = String(input || "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 5);
-  return c.length === 5 ? c : null;
+    .slice(0, 32);
+  return c.length >= 8 ? c : null;
 }
