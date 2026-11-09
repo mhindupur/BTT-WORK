@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
 import DocUploadCard from "../../components/DocUploadCard";
 import ListToolbar from "../../components/ListToolbar";
+import { RcBookPreviewPanel, RcBookUploadField } from "../../components/RcBookPanel";
 import VehicleInfoFields from "../../components/VehicleInfoFields";
 import {
   detailsPayload,
@@ -523,47 +524,54 @@ export default function SmVehicles() {
       {msg && <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
 
       {showAdd && (
-        <form onSubmit={create} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-sm">
-          <h2 className="text-lg font-bold text-btt-navy">New vehicle</h2>
-          <p className="text-sm text-slate-600">
-            Step 1: vehicle details. After save, upload documents and expiry dates. Permit and vehicle
-            photo are included; Other is optional.
-          </p>
-          <Field label="Vehicle number (Reg No) *">
-            <input
-              className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base uppercase font-mono"
-              placeholder="KA01MM1234"
-              value={form.registration_number}
-              onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
-              required
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] gap-4 items-start">
+          <form
+            onSubmit={create}
+            className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-sm min-w-0"
+          >
+            <h2 className="text-lg font-bold text-btt-navy">New vehicle</h2>
+            <p className="text-sm text-slate-600">
+              Step 1: vehicle details. After save, upload documents and expiry dates. Permit and vehicle
+              photo are included; Other is optional.
+            </p>
+            <RcBookUploadField value={form} onChange={setForm} />
+            <Field label="Vehicle number (Reg No) *">
+              <input
+                className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base uppercase font-mono"
+                placeholder="KA01MM1234"
+                value={form.registration_number}
+                onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
+                required
+              />
+            </Field>
+            <VehicleInfoFields
+              value={form}
+              onChange={setForm}
+              vehicleTypes={vehicleTypes}
+              gpsVendors={gpsVendors}
+              showStatus={false}
+              showExpirySection={false}
+              dense
             />
-          </Field>
-          <VehicleInfoFields
-            value={form}
-            onChange={setForm}
-            vehicleTypes={vehicleTypes}
-            gpsVendors={gpsVendors}
-            showStatus={false}
-            showExpirySection={false}
-            dense
-          />
-          <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
-            Certificate expiry dates (insurance, fitness, PUC, tax, permit) are entered when you upload
-            each document.
-          </p>
-          <div className="flex flex-wrap gap-2 justify-end">
-            <button
-              type="button"
-              className="px-4 py-2.5 rounded-xl border border-slate-300 font-medium"
-              onClick={resetAddForm}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="bg-btt-navy text-white rounded-xl py-2.5 px-4 font-semibold">
-              Save & upload documents
-            </button>
-          </div>
-        </form>
+            <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              Certificate expiry dates (insurance, fitness, PUC, tax, permit) are entered when you upload
+              each document.
+            </p>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 font-medium"
+                onClick={resetAddForm}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="bg-btt-navy text-white rounded-xl py-2.5 px-4 font-semibold">
+                Save & upload documents
+              </button>
+            </div>
+          </form>
+          <RcBookPreviewPanel value={form} />
+        </div>
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">

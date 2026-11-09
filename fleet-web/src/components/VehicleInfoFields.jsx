@@ -142,7 +142,6 @@ export default function VehicleInfoFields({
   showVehicleType = true,
   showStatus = true,
   showExpirySection = true,
-  showRcUpload = true,
   dense = false,
 }) {
   const set = (patch) => onChange({ ...value, ...patch });
@@ -222,15 +221,6 @@ export default function VehicleInfoFields({
       gps_vendor_id: rawId,
       gps_vendor: v?.name || "",
     });
-  }
-
-  function onRcFile(file) {
-    if (!file) {
-      set({ rc_preview_url: "", rc_file: null });
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    set({ rc_preview_url: url, rc_file: file });
   }
 
   const partySectionTitle =
@@ -345,19 +335,6 @@ export default function VehicleInfoFields({
           </Labeled>
         ) : null}
       </div>
-
-      {showRcUpload ? (
-        <div className="mt-4">
-          <Labeled label="Upload RC Book" hint="Preview opens on the right — use it to copy engine / chassis details">
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              className="block w-full text-sm"
-              onChange={(e) => onRcFile(e.target.files?.[0] || null)}
-            />
-          </Labeled>
-        </div>
-      ) : null}
     </div>
   );
 
@@ -641,7 +618,7 @@ export default function VehicleInfoFields({
     </div>
   ) : null;
 
-  const formColumn = (
+  return (
     <div className="space-y-4 min-w-0">
       {vehicleBlock}
       {driverBlock}
@@ -656,35 +633,6 @@ export default function VehicleInfoFields({
           placeholder="Notes"
         />
       </Labeled>
-    </div>
-  );
-
-  if (!showRcUpload) return formColumn;
-
-  return (
-    <div className="grid lg:grid-cols-2 gap-4 items-start">
-      {formColumn}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-h-[280px] lg:sticky lg:top-4">
-        <div className="text-sm font-bold text-btt-navy mb-2">RC Book preview</div>
-        <p className="text-xs text-slate-500 mb-3">
-          Upload RC on the left. Preview here to copy engine number, chassis number, and other details into the form.
-        </p>
-        {value.rc_preview_url ? (
-          String(value.rc_file?.type || "").includes("pdf") ? (
-            <iframe title="RC preview" src={value.rc_preview_url} className="w-full h-[70vh] rounded-lg bg-white border" />
-          ) : (
-            <img
-              src={value.rc_preview_url}
-              alt="RC Book preview"
-              className="w-full max-h-[70vh] object-contain rounded-lg bg-white border"
-            />
-          )
-        ) : (
-          <div className="h-48 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg">
-            No RC uploaded yet
-          </div>
-        )}
-      </div>
     </div>
   );
 }

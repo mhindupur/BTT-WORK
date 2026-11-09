@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api";
 import DonutChart from "../../components/DonutChart";
 import ListToolbar from "../../components/ListToolbar";
+import { RcBookPreviewPanel, RcBookUploadField } from "../../components/RcBookPanel";
 import VehicleInfoFields from "../../components/VehicleInfoFields";
 import { APPROVAL_STATUS_LABEL } from "../../constants/vehicleDocs";
 import {
@@ -269,78 +270,83 @@ export default function AdminVehicles() {
       ) : null}
 
       {showAdd && (
-        <form
-          onSubmit={create}
-          className="bg-white p-4 rounded-xl border border-slate-200 mb-6 space-y-4 shadow-sm"
-        >
-          <div className="text-sm font-semibold text-btt-navy">New vehicle</div>
-          <p className="text-sm text-slate-600">
-            Vehicle number in CAPS with no hyphen, e.g.{" "}
-            <span className="font-mono font-semibold">KA01MM1234</span>. Site serial is assigned
-            automatically. Site manager is loaded from the selected site.
-          </p>
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] gap-4 items-start mb-6">
+          <form
+            onSubmit={create}
+            className="bg-white p-4 rounded-xl border border-slate-200 space-y-4 shadow-sm min-w-0"
+          >
+            <div className="text-sm font-semibold text-btt-navy">New vehicle</div>
+            <p className="text-sm text-slate-600">
+              Vehicle number in CAPS with no hyphen, e.g.{" "}
+              <span className="font-mono font-semibold">KA01MM1234</span>. Site serial is assigned
+              automatically. Site manager is loaded from the selected site.
+            </p>
 
-          <div className="grid md:grid-cols-2 gap-3">
-            <select
-              className="border rounded-lg px-3 py-2"
-              value={form.client_id}
-              onChange={(e) => onSiteChange(e.target.value, setForm, form)}
-              required
-            >
-              <option value="">Site *</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {clientLabel(c)}
-                </option>
-              ))}
-            </select>
+            <RcBookUploadField value={form} onChange={setForm} />
 
-            <div className="border rounded-lg px-3 py-2 bg-slate-50 text-sm text-slate-700">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
-                Site manager
-              </div>
-              <div className="mt-0.5">
-                {form.client_id ? formSm.label : "Select a site to load site manager"}
+            <div className="grid md:grid-cols-2 gap-3">
+              <select
+                className="border rounded-lg px-3 py-2"
+                value={form.client_id}
+                onChange={(e) => onSiteChange(e.target.value, setForm, form)}
+                required
+              >
+                <option value="">Site *</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {clientLabel(c)}
+                  </option>
+                ))}
+              </select>
+
+              <div className="border rounded-lg px-3 py-2 bg-slate-50 text-sm text-slate-700">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                  Site manager
+                </div>
+                <div className="mt-0.5">
+                  {form.client_id ? formSm.label : "Select a site to load site manager"}
+                </div>
               </div>
             </div>
-          </div>
 
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
-            <input
-              className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
-              placeholder="KA01MM1234"
-              value={form.registration_number}
-              onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
-              required
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Vehicle number (Reg No) *</span>
+              <input
+                className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
+                placeholder="KA01MM1234"
+                value={form.registration_number}
+                onChange={(e) => setForm({ ...form, registration_number: formatRegInput(e.target.value) })}
+                required
+              />
+            </label>
+
+            <VehicleInfoFields
+              value={form}
+              onChange={setForm}
+              vehicleTypes={vehicleTypes}
+              gpsVendors={gpsVendors}
             />
-          </label>
 
-          <VehicleInfoFields
-            value={form}
-            onChange={setForm}
-            vehicleTypes={vehicleTypes}
-            gpsVendors={gpsVendors}
-          />
-
-          {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
-          <div className="flex flex-wrap gap-2 justify-end">
-            <button
-              type="button"
-              className="px-4 py-2 rounded-lg border border-slate-300"
-              onClick={() => {
-                setShowAdd(false);
-                setForm(emptyForm());
-                setFormErr("");
-              }}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
-              Save vehicle
-            </button>
-          </div>
-        </form>
+            {formErr && <p className="text-red-600 text-sm">{formErr}</p>}
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-slate-300"
+                onClick={() => {
+                  setShowAdd(false);
+                  setForm(emptyForm());
+                  setFormErr("");
+                }}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="bg-btt-navy text-white rounded-lg py-2 px-4 font-medium">
+                Save vehicle
+              </button>
+            </div>
+          </form>
+          <RcBookPreviewPanel value={form} />
+        </div>
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -506,65 +512,69 @@ export default function AdminVehicles() {
               </button>
             </div>
 
-            <form onSubmit={saveEdit} className="space-y-4">
-              <select
-                className="w-full border rounded-lg px-3 py-2"
-                value={editing.client_id}
-                onChange={(e) => onSiteChange(e.target.value, setEditing, editing)}
-                required
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {clientLabel(c)}
-                  </option>
-                ))}
-              </select>
-
-              <div className="border rounded-lg px-3 py-2 bg-slate-50 text-sm text-slate-700">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
-                  Site manager
-                </div>
-                <div className="mt-0.5">{editSm.label}</div>
-              </div>
-
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Vehicle number *</span>
-                <input
-                  className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
-                  value={editing.registration_number}
-                  onChange={(e) =>
-                    setEditing({ ...editing, registration_number: formatRegInput(e.target.value) })
-                  }
-                />
-              </label>
-              {editing.vehicle_serial ? (
-                <p className="text-sm text-slate-600">
-                  Serial: <span className="font-mono font-semibold">{editing.vehicle_serial}</span>
-                </p>
-              ) : null}
-
-              <VehicleInfoFields
-                value={editing}
-                onChange={setEditing}
-                vehicleTypes={vehicleTypes}
-                gpsVendors={gpsVendors}
-                dense
-              />
-
-              {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
-              <div className="flex gap-2 justify-end">
-                <button
-                  type="button"
-                  className="px-4 py-2 rounded-lg border border-slate-300"
-                  onClick={() => setEditing(null)}
+            <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(240px,38%)] gap-4 items-start">
+              <form onSubmit={saveEdit} className="space-y-4 min-w-0">
+                <RcBookUploadField value={editing} onChange={setEditing} />
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={editing.client_id}
+                  onChange={(e) => onSiteChange(e.target.value, setEditing, editing)}
+                  required
                 >
-                  Cancel
-                </button>
-                <button type="submit" className="px-4 py-2 rounded-lg bg-btt-navy text-white font-medium">
-                  Save
-                </button>
-              </div>
-            </form>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {clientLabel(c)}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="border rounded-lg px-3 py-2 bg-slate-50 text-sm text-slate-700">
+                  <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                    Site manager
+                  </div>
+                  <div className="mt-0.5">{editSm.label}</div>
+                </div>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Vehicle number *</span>
+                  <input
+                    className="mt-1 w-full border rounded-lg px-3 py-2 font-mono uppercase"
+                    value={editing.registration_number}
+                    onChange={(e) =>
+                      setEditing({ ...editing, registration_number: formatRegInput(e.target.value) })
+                    }
+                  />
+                </label>
+                {editing.vehicle_serial ? (
+                  <p className="text-sm text-slate-600">
+                    Serial: <span className="font-mono font-semibold">{editing.vehicle_serial}</span>
+                  </p>
+                ) : null}
+
+                <VehicleInfoFields
+                  value={editing}
+                  onChange={setEditing}
+                  vehicleTypes={vehicleTypes}
+                  gpsVendors={gpsVendors}
+                  dense
+                />
+
+                {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg border border-slate-300"
+                    onClick={() => setEditing(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="px-4 py-2 rounded-lg bg-btt-navy text-white font-medium">
+                    Save
+                  </button>
+                </div>
+              </form>
+              <RcBookPreviewPanel value={editing} />
+            </div>
           </div>
         </div>
       )}
