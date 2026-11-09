@@ -8,8 +8,8 @@ function isPdfSource(file, path) {
 }
 
 /**
- * One document section: expiry + upload on the left, live preview on the right
- * so site managers can copy dates from the document.
+ * One document section: drag/drop uploads immediately; preview on the right.
+ * Expiry can be set after upload (saved via onExpiryChange).
  */
 export default function DocUploadCard({
   section,
@@ -25,40 +25,30 @@ export default function DocUploadCard({
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [localErr, setLocalErr] = useState("");
-  const [stagedFile, setStagedFile] = useState(null);
-  const [stagedUrl, setStagedUrl] = useState("");
+  const [localPreviewUrl, setLocalPreviewUrl] = useState("");
 
   const statusLabel = doc ? DOC_STATUS_LABEL[doc.status] || doc.status : "Not uploaded yet";
   const hasFile = Boolean(doc?.file_path);
   const done = hasFile && doc?.status !== "rejected";
-
-  const previewUrl = stagedUrl || doc?.file_path || "";
-  const previewIsPdf = isPdfSource(stagedFile, previewUrl || doc?.original_filename);
+  const previewUrl = localPreviewUrl || doc?.file_path || "";
+  const previewIsPdf = isPdfSource(null, previewUrl || doc?.original_filename);
+  const minExpiry = minExpiryISODate();
 
   useEffect(() => {
-    setStagedFile(null);
-    setStagedUrl((prev) => {
+    setLocalErr("");
+    setLocalPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return "";
     });
-    setLocalErr("");
   }, [section?.type, doc?.id, doc?.file_path]);
 
   useEffect(() => {
     return () => {
-      if (stagedUrl) URL.revokeObjectURL(stagedUrl);
+      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
     };
-  }, [stagedUrl]);
+  }, [localPreviewUrl]);
 
-  function clearStaged() {
-    setStagedFile(null);
-    setStagedUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return "";
-    });
-  }
-
-  function stageOrUpload(file) {
+  function uploadNow(file) {
     setLocalErr("");
     if (!file) return;
     const okType =
@@ -74,50 +64,20 @@ export default function DocUploadCard({
       return;
     }
 
-    // Always stage for side preview first so expiry can be read from the document
     const url = URL.createObjectURL(file);
-    setStagedFile(file);
-    setStagedUrl((prev) => {
+    setLocalPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return url;
     });
-
-    // If expiry already filled (or not required), upload immediately; keep preview until server doc loads
-    if (!section.needsExpiry) {
-      onUpload(file);
-      return;
-    }
-    if (expiryValue) {
-      if (!isExpiryAfterToday(expiryValue)) {
-        setLocalErr("Expiry date must be after today. Past and today are blocked.");
-        return;
-      }
-      onUpload(file);
-    }
+    onUpload(file);
   }
-
-  function confirmUpload() {
-    setLocalErr("");
-    if (!stagedFile) return;
-    if (section.needsExpiry && !expiryValue) {
-      setLocalErr(`Select ${section.title} expiry date from the preview, then upload.`);
-      return;
-    }
-    if (section.needsExpiry && !isExpiryAfterToday(expiryValue)) {
-      setLocalErr("Expiry date must be after today. Past and today are blocked.");
-      return;
-    }
-    onUpload(stagedFile);
-  }
-
-  const minExpiry = minExpiryISODate();
 
   function onDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     setDragging(false);
     if (!canEdit || busy) return;
-    stageOrUpload(e.dataTransfer?.files?.[0]);
+    uploadNow(e.dataTransfer?.files?.[0]);
   }
 
   return (
@@ -154,6 +114,56 @@ export default function DocUploadCard({
           </div>
         </div>
 
+        {canEdit ? (
+          <div
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                inputRef.current?.click();
+              }
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              if (canEdit) setDragging(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (canEdit) setDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragging(false);
+            }}
+            onDrop={onDrop}
+            onClick={() => !busy && inputRef.current?.click()}
+            className={`mb-3 rounded-2xl border-2 border-dashed px-4 py-6 text-center cursor-pointer select-none transition-colors ${
+              dragging ? "border-btt-accent bg-amber-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
+            } ${busy ? "opacity-60 pointer-events-none" : ""}`}
+          >
+            <div className="text-sm font-bold tracking-wide text-btt-accent mb-1 uppercase">
+              {hasFile ? "Replace file" : "Upload"}
+            </div>
+            <div className="text-base font-bold text-btt-navy">
+              {hasFile ? "Drop or choose a new file to replace" : "Drop file here or tap to choose"}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">JPG, PNG or PDF · max 12 MB · uploads immediately</div>
+          </div>
+        ) : null}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*,.pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            uploadNow(f);
+          }}
+        />
+
         {section.needsExpiry && (
           <label className="block mb-3">
             <span className="text-sm font-semibold text-slate-700">
@@ -183,143 +193,49 @@ export default function DocUploadCard({
           </label>
         )}
 
-        {hasFile && !stagedFile ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-800 truncate">{doc.original_filename}</div>
-              <div
-                className={`text-xs mt-0.5 font-medium ${
-                  doc.status === "approved"
-                    ? "text-green-700"
-                    : doc.status === "rejected"
-                      ? "text-red-700"
-                      : "text-amber-800"
-                }`}
-              >
-                {statusLabel}
-              </div>
-              {doc.expiry_date ? (
-                <div className="text-xs text-slate-500 mt-0.5">
-                  Expiry on file: {String(doc.expiry_date).slice(0, 10)}
-                </div>
-              ) : null}
-              {doc.rejection_note ? (
-                <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-900">
-                  <div className="font-bold text-xs uppercase tracking-wide text-red-800 mb-0.5">
-                    Admin rejected — reason
-                  </div>
-                  <div className="leading-snug">{doc.rejection_note}</div>
-                </div>
-              ) : doc.status === "rejected" ? (
-                <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-900 font-medium">
-                  Admin rejected this document. Please re-upload a clear file.
-                </div>
-              ) : null}
+        {hasFile ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+            <div className="text-sm font-semibold text-slate-800 truncate">{doc.original_filename}</div>
+            <div
+              className={`text-xs font-medium ${
+                doc.status === "approved"
+                  ? "text-green-700"
+                  : doc.status === "rejected"
+                    ? "text-red-700"
+                    : "text-amber-800"
+              }`}
+            >
+              {statusLabel}
             </div>
-            {canEdit && (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="px-4 py-2.5 rounded-xl border-2 border-btt-navy text-btt-navy text-sm font-semibold disabled:opacity-50"
-                  onClick={() => inputRef.current?.click()}
-                >
-                  Replace file
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="px-4 py-2.5 rounded-xl border-2 border-red-300 text-red-700 text-sm font-semibold disabled:opacity-50"
-                  onClick={() => onRemove?.(doc)}
-                >
-                  Remove
-                </button>
+            {doc.expiry_date ? (
+              <div className="text-xs text-slate-500">Expiry on file: {String(doc.expiry_date).slice(0, 10)}</div>
+            ) : section.needsExpiry ? (
+              <div className="text-xs text-amber-800 font-medium">Set expiry date above (required before send to admin)</div>
+            ) : null}
+            {doc.rejection_note ? (
+              <div className="mt-1 p-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-900">
+                <div className="font-bold text-xs uppercase tracking-wide text-red-800 mb-0.5">
+                  Admin rejected — reason
+                </div>
+                <div className="leading-snug">{doc.rejection_note}</div>
               </div>
-            )}
-          </div>
-        ) : stagedFile ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
-            <div className="text-sm font-semibold text-slate-800 truncate">{stagedFile.name}</div>
-            <p className="text-xs text-slate-600">
-              Preview is on the right. Set expiry if required, then confirm upload.
-            </p>
-            <div className="flex flex-wrap gap-2">
+            ) : null}
+            {canEdit ? (
               <button
                 type="button"
                 disabled={busy}
-                className="px-4 py-2.5 rounded-xl bg-btt-navy text-white text-sm font-semibold disabled:opacity-50"
-                onClick={confirmUpload}
+                className="mt-1 px-4 py-2 rounded-xl border-2 border-red-300 text-red-700 text-sm font-semibold disabled:opacity-50"
+                onClick={() => onRemove?.(doc)}
               >
-                {busy ? "Uploading…" : "Confirm upload"}
+                Remove
               </button>
-              <button
-                type="button"
-                disabled={busy}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold disabled:opacity-50"
-                onClick={() => inputRef.current?.click()}
-              >
-                Choose another
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold disabled:opacity-50"
-                onClick={clearStaged}
-              >
-                Cancel
-              </button>
-            </div>
+            ) : null}
           </div>
-        ) : canEdit ? (
-          <div
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                inputRef.current?.click();
-              }
-            }}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              if (canEdit) setDragging(true);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              if (canEdit) setDragging(true);
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setDragging(false);
-            }}
-            onDrop={onDrop}
-            onClick={() => !busy && inputRef.current?.click()}
-            className={`rounded-2xl border-2 border-dashed px-4 py-8 text-center cursor-pointer select-none transition-colors ${
-              dragging ? "border-btt-accent bg-amber-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
-            } ${busy ? "opacity-60 pointer-events-none" : ""}`}
-          >
-            <div className="text-sm font-bold tracking-wide text-btt-accent mb-2 uppercase">Upload</div>
-            <div className="text-lg font-bold text-btt-navy">Tap here to take / choose photo</div>
-            <div className="text-sm text-slate-600 mt-1">Or drag and drop the file into this box</div>
-            <div className="text-xs text-slate-500 mt-2">JPG, PNG or PDF · max 12 MB</div>
-          </div>
-        ) : (
+        ) : !canEdit ? (
           <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500 text-center">
             No file uploaded
           </div>
-        )}
-
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*,.pdf,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            stageOrUpload(f);
-          }}
-        />
+        ) : null}
 
         {localErr && <p className="mt-2 text-sm text-red-700 font-medium">{localErr}</p>}
         {busy && <p className="mt-2 text-sm text-slate-600">Uploading… please wait</p>}
@@ -346,7 +262,7 @@ export default function DocUploadCard({
           )
         ) : (
           <div className="h-56 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg bg-white px-4 text-center">
-            Upload or select a file to preview {section.title} here
+            Drop or choose a file — preview appears here after upload
           </div>
         )}
       </aside>

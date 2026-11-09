@@ -740,6 +740,43 @@ sm.post("/:id/documents", uploadDoc.single("file"), async (req, res) => {
   res.status(201).json(await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [result.insertId]));
 });
 
+/** Update document expiry after file is already uploaded. */
+sm.patch("/:id/documents/:docId", async (req, res) => {
+  const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
+  if (!smRow) return res.status(400).json({ error: "Site manager profile missing" });
+  const access = await smCanAccessVehicle(smRow.id, req.params.id);
+  if (access.error) return res.status(access.status).json({ error: access.error });
+  const existing = access.vehicle;
+  if (!["draft", "rejected", "pending_review"].includes(existing.approval_status)) {
+    return res.status(400).json({ error: "Cannot update documents for an approved vehicle here" });
+  }
+  if (Number(existing.submitted_by_site_manager_id) !== Number(smRow.id)) {
+    return res.status(403).json({ error: "You can only manage docs for vehicles you submitted" });
+  }
+  const doc = await queryOne("SELECT * FROM vehicle_documents WHERE id = ? AND vehicle_id = ?", [
+    req.params.docId,
+    existing.id,
+  ]);
+  if (!doc) return res.status(404).json({ error: "Document not found" });
+
+  const expiry = req.body?.expiry_date ? String(req.body.expiry_date).slice(0, 10) : null;
+  if (!expiry || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+    return res.status(400).json({ error: "expiry_date required (YYYY-MM-DD)" });
+  }
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (expiry <= todayIso) {
+    return res.status(400).json({ error: "Document expiry must be after today" });
+  }
+
+  await execute("UPDATE vehicle_documents SET expiry_date = ? WHERE id = ?", [expiry, doc.id]);
+  const vehicleDateCol = DOC_TYPE_VEHICLE_DATE[doc.doc_type];
+  if (vehicleDateCol) {
+    await execute(`UPDATE vehicles SET ${vehicleDateCol} = ? WHERE id = ?`, [expiry, existing.id]);
+  }
+  res.json(await queryOne("SELECT * FROM vehicle_documents WHERE id = ?", [doc.id]));
+});
+
 /** Remove a document from a draft/rejected/pending vehicle (site manager who submitted it). */
 sm.delete("/:id/documents/:docId", async (req, res) => {
   const smRow = await queryOne("SELECT id FROM site_managers WHERE user_id = ?", [req.user.id]);
@@ -778,9 +815,24 @@ sm.post("/:id/submit", async (req, res) => {
   if (!["draft", "rejected"].includes(existing.approval_status)) {
     return res.status(400).json({ error: "Vehicle is already submitted or approved" });
   }
-  const docs = await queryOne("SELECT COUNT(*) AS c FROM vehicle_documents WHERE vehicle_id = ?", [existing.id]);
-  if (!Number(docs?.c || 0)) {
+  const docs = await query(
+    "SELECT id, doc_type, expiry_date FROM vehicle_documents WHERE vehicle_id = ?",
+    [existing.id]
+  );
+  if (!docs.length) {
     return res.status(400).json({ error: "Upload at least one supporting document before submit" });
+  }
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const needsExpiryTypes = new Set(["RC", "INS", "FC", "PUC", "TAX", "PERMIT"]);
+  for (const d of docs) {
+    if (!needsExpiryTypes.has(String(d.doc_type || "").toUpperCase())) continue;
+    const exp = d.expiry_date ? String(d.expiry_date).slice(0, 10) : "";
+    if (!exp || exp <= todayIso) {
+      return res.status(400).json({
+        error: `${d.doc_type} expiry must be set and after today before submit`,
+      });
+    }
   }
 
   await execute(

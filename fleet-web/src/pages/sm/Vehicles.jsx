@@ -229,12 +229,6 @@ export default function SmVehicles() {
 
   async function uploadForType(section, file) {
     if (!selectedId) return setErr("Select or create a vehicle first");
-    if (section.needsExpiry && !expiryByType[section.type]) {
-      return setErr(`Please select expiry date for ${section.title} first.`);
-    }
-    if (section.needsExpiry && !isExpiryAfterToday(expiryByType[section.type])) {
-      return setErr(`${section.title} expiry must be after today.`);
-    }
     setErr("");
     setMsg("");
     setUploadingType(section.type);
@@ -242,17 +236,43 @@ export default function SmVehicles() {
     fd.append("file", file);
     fd.append("doc_type", section.type);
     const exp = expiryByType[section.type];
-    if (exp) fd.append("expiry_date", exp);
+    if (exp && isExpiryAfterToday(exp)) fd.append("expiry_date", exp);
     try {
       await api.post(`/sm/vehicles/${selectedId}/documents`, fd);
-      setMsg(`${section.title} saved.`);
+      setMsg(`${section.title} uploaded. Set expiry from the preview if required.`);
       await loadDocs(selectedId);
       await load();
-      setDocStep((s) => Math.min(s + 1, activeSections.length - 1));
     } catch (ex) {
       setErr(ex.response?.data?.error || ex.message);
     } finally {
       setUploadingType(null);
+    }
+  }
+
+  async function saveDocExpiry(sectionType, expiry) {
+    if (!selectedId) return;
+    const doc = docsByType[sectionType];
+    if (!doc?.id) {
+      setExpiryByType((prev) => ({ ...prev, [sectionType]: expiry }));
+      return;
+    }
+    if (!expiry) {
+      setExpiryByType((prev) => ({ ...prev, [sectionType]: "" }));
+      return;
+    }
+    if (!isExpiryAfterToday(expiry)) {
+      setErr(`${sectionType} expiry must be after today.`);
+      return;
+    }
+    setErr("");
+    setExpiryByType((prev) => ({ ...prev, [sectionType]: expiry }));
+    try {
+      await api.patch(`/sm/vehicles/${selectedId}/documents/${doc.id}`, { expiry_date: expiry });
+      setMsg(`${sectionType} expiry saved.`);
+      await loadDocs(selectedId);
+      await load();
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
     }
   }
 
@@ -390,7 +410,7 @@ export default function SmVehicles() {
           index={docStep + 1}
           doc={docsByType[currentSection.type]}
           expiryValue={expiryByType[currentSection.type] || ""}
-          onExpiryChange={(v) => setExpiryByType((prev) => ({ ...prev, [currentSection.type]: v }))}
+          onExpiryChange={(v) => saveDocExpiry(currentSection.type, v)}
           onUpload={(file) => uploadForType(currentSection, file)}
           onRemove={removeDoc}
           canEdit={Boolean(canEditDocs)}
