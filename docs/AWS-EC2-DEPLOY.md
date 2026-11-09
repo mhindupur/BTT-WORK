@@ -208,9 +208,15 @@ DEMO_SM_PASSWORD=Supervisor@123
 DEMO_AM_EMAIL=account@btt.fleet
 DEMO_AM_PASSWORD=Account@123
 
-# IFSC verify (IndianAPI)
+# IFSC verify (IndianAPI) — required for Verify IFSC on vehicle bank details
 INDIANAPI_IFSC_URL=https://ifsc.indianapi.in/ifsc
 INDIANAPI_IFSC_KEY=YOUR_INDIANAPI_KEY
+```
+
+After editing `.env`, reload PM2 env:
+
+```bash
+pm2 restart btt-fleet-api --update-env
 ```
 
 For real admin WhatsApp OTP (not stub), set `WHATSAPP_PROVIDER=interakt` or `meta` plus the matching OTP template keys from `.env.example`.

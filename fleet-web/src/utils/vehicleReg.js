@@ -29,21 +29,21 @@ export function formatRegInput(value) {
     .slice(0, 11);
 }
 
-/** Site code: alphanumeric only, minimum 8 characters (also used as Site Manager login). */
+/** Site code: alphanumeric only, 8–10 characters (also used as Site Manager login). */
 export function normalizeSiteCode(input) {
   const c = String(input || "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 32);
-  return c.length >= 8 ? c : null;
+    .slice(0, 10);
+  return c.length >= 8 && c.length <= 10 ? c : null;
 }
 
 export function formatSiteCodeInput(value) {
   return String(value || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 32);
+    .slice(0, 10);
 }
 
 export function clientLabel(c) {

@@ -20,9 +20,15 @@ r.get("/:code", requireAuth, async (req, res) => {
   const key = process.env.INDIANAPI_IFSC_KEY || process.env.IFSC_API_KEY || "";
   const base = (process.env.INDIANAPI_IFSC_URL || "https://ifsc.indianapi.in/ifsc").replace(/\/$/, "");
 
+  if (!key) {
+    return res.status(503).json({
+      error:
+        "IFSC API key not configured. Add INDIANAPI_IFSC_KEY to fleet-api/.env and restart with: pm2 restart btt-fleet-api --update-env",
+    });
+  }
+
   try {
-    const headers = { Accept: "application/json" };
-    if (key) headers["x-api-key"] = key;
+    const headers = { Accept: "application/json", "x-api-key": key };
 
     // IndianAPI expects ?bank_code=IFSC (not path segment)
     const url = `${base}?bank_code=${encodeURIComponent(code)}`;
@@ -35,8 +41,11 @@ r.get("/:code", requireAuth, async (req, res) => {
       data = { raw: text };
     }
     if (!upstream.ok) {
+      const msg = data?.message || data?.error || data?.raw || "IFSC lookup failed";
       return res.status(upstream.status === 404 ? 404 : 502).json({
-        error: data?.message || data?.error || "IFSC lookup failed",
+        error: String(msg).includes("API key")
+          ? "IFSC API key rejected. Check INDIANAPI_IFSC_KEY in fleet-api/.env, then: pm2 restart btt-fleet-api --update-env"
+          : msg,
         detail: data,
       });
     }

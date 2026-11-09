@@ -127,7 +127,7 @@ async function createSiteManagerForClient(clientId, sm, siteCode) {
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
   if (!loginCode || loginCode.length < 8) {
-    return { error: "site_code required for Site Manager login (min 8 alphanumeric)", status: 400 };
+    return { error: "site_code required for Site Manager login (8–10 alphanumeric)", status: 400 };
   }
   if (!sm.full_name) {
     return { error: "site_manager.full_name required", status: 400 };
@@ -212,7 +212,7 @@ r.post("/", async (req, res) => {
   if (!f.name) return res.status(400).json({ error: "name required" });
   if (!f.site_code) {
     return res.status(400).json({
-      error: "site_code required — min 8 letters/digits (alphanumeric), used as Site Manager login",
+      error: "site_code required — 8 to 10 letters/digits (alphanumeric), used as Site Manager login",
     });
   }
   const clash = await queryOne("SELECT id FROM clients WHERE site_code = ?", [f.site_code]);
@@ -267,7 +267,7 @@ r.patch("/:id", async (req, res) => {
   if (!f.name) return res.status(400).json({ error: "name required" });
   if (!f.site_code) {
     return res.status(400).json({
-      error: "site_code required — min 8 letters/digits (alphanumeric), used as Site Manager login",
+      error: "site_code required — 8 to 10 letters/digits (alphanumeric), used as Site Manager login",
     });
   }
   const clash = await queryOne("SELECT id FROM clients WHERE site_code = ? AND id <> ?", [

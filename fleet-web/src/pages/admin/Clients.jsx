@@ -199,13 +199,13 @@ export default function AdminClients() {
       />
       <input
         className="border rounded-lg px-3 py-2 font-mono uppercase"
-        placeholder="Site code * (min 8 alphanumeric — SM login)"
+        placeholder="Site code * (8–10 alphanumeric — SM login)"
         minLength={8}
-        maxLength={32}
+        maxLength={10}
         value={value.site_code}
         onChange={(e) => setValue({ ...value, site_code: formatSiteCodeInput(e.target.value) })}
         required
-        title="Used as Site Manager login. Letters and numbers only, minimum 8 characters."
+        title="Used as Site Manager login. Letters and numbers only, 8 to 10 characters."
       />
       <select
         className="border rounded-lg px-3 py-2 bg-white md:col-span-2"
@@ -337,7 +337,7 @@ export default function AdminClients() {
           <h1 className="text-2xl font-bold text-btt-navy">Sites</h1>
           <p className="text-sm text-slate-600 mt-1">
             All sites are listed below. Use <strong>Add site</strong> when you need to create a site with
-            its site manager and optional account manager. Site code (min 8 alphanumeric) is the Site
+            its site manager and optional account manager. Site code (8–10 alphanumeric) is the Site
             Manager login; email is optional for notifications only.
           </p>
         </div>

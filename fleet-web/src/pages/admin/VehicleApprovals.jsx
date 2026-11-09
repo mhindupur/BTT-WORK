@@ -68,6 +68,20 @@ export default function AdminVehicleApprovals() {
     loadDocs(selectedId).catch(console.error);
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!docs.length) {
+      setPreviewDoc(null);
+      return;
+    }
+    setPreviewDoc((prev) => {
+      if (prev && docs.some((d) => Number(d.id) === Number(prev.id))) {
+        return docs.find((d) => Number(d.id) === Number(prev.id)) || prev;
+      }
+      const pending = docs.find((d) => d.status === "pending");
+      return pending || docs[0];
+    });
+  }, [docs]);
+
   const selected = rows.find((r) => Number(r.id) === Number(selectedId));
 
   const filteredRows = useMemo(() => {
@@ -257,228 +271,200 @@ export default function AdminVehicleApprovals() {
       </div>
 
       {selected && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="w-full min-w-0 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2 bg-white rounded-2xl border border-slate-200 p-4">
             <div>
               <h2 className="text-xl font-bold text-btt-navy">Review {selected.registration_number}</h2>
-              <p className="text-sm text-slate-600 mt-1">Check each document below, then approve or reject the vehicle.</p>
+              <p className="text-sm text-slate-600 mt-1">
+                Checklist on the left · live document preview on the right. Verify each file, then approve or reject.
+              </p>
             </div>
             <button type="button" className="text-sm text-slate-600 underline" onClick={() => setSelectedId(null)}>
               Close
             </button>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-3 text-sm rounded-xl bg-slate-50 border border-slate-200 p-4">
-            <div>
-              <span className="text-slate-500">Serial</span>
-              <div className="font-semibold font-mono">{selected.vehicle_serial || "—"}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Ownership</span>
-              <div className="font-semibold">{ownershipLabel(selected.ownership)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Owner</span>
-              <div className="font-semibold">
-                {selected.owner_name || "—"}
-                {selected.owner_phone ? ` · ${selected.owner_phone}` : ""}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start w-full">
+            <div className="space-y-4 min-w-0">
+              <div className="grid sm:grid-cols-2 gap-3 text-sm rounded-2xl bg-white border border-slate-200 p-4">
+                <div>
+                  <span className="text-slate-500">Serial</span>
+                  <div className="font-semibold font-mono">{selected.vehicle_serial || "—"}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Site</span>
+                  <div className="font-semibold">
+                    {selected.client_name || "—"}
+                    {selected.site_code ? ` (${selected.site_code})` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Ownership</span>
+                  <div className="font-semibold">{ownershipLabel(selected.ownership)}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Owner</span>
+                  <div className="font-semibold">
+                    {selected.owner_name || "—"}
+                    {selected.owner_phone ? ` · ${selected.owner_phone}` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Driver</span>
+                  <div className="font-semibold">
+                    {selected.driver_name || "—"}
+                    {selected.driver_phone ? ` · ${selected.driver_phone}` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Model / registered</span>
+                  <div className="font-semibold">
+                    {selected.vehicle_type_name || selected.make_model || "—"}
+                    {selected.registered_date ? ` · ${dateStr(selected.registered_date)}` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Engine no</span>
+                  <div className="font-semibold font-mono text-xs">{selected.engine_number || "—"}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Chassis no</span>
+                  <div className="font-semibold font-mono text-xs">{selected.chassis_number || "—"}</div>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-slate-500">Account / IFSC</span>
+                  <div className="font-semibold">
+                    {selected.account_holder_name || selected.account_number || selected.account_ifsc
+                      ? [
+                          selected.account_holder_name,
+                          selected.account_number,
+                          selected.account_ifsc,
+                          selected.account_bank_name,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "—"}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <span className="text-slate-500">Driver</span>
-              <div className="font-semibold">
-                {selected.driver_name || "—"}
-                {selected.driver_phone ? ` · ${selected.driver_phone}` : ""}
-              </div>
-            </div>
-            <div>
-              <span className="text-slate-500">Model / year</span>
-              <div className="font-semibold">
-                {selected.vehicle_type_name || selected.make_model || "—"}
-                {selected.manufacture_year ? ` · ${selected.manufacture_year}` : ""}
-              </div>
-            </div>
-            <div>
-              <span className="text-slate-500">Induction date</span>
-              <div className="font-semibold">{dateStr(selected.registration_date)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Seating</span>
-              <div className="font-semibold">{selected.seating_capacity ? `${selected.seating_capacity} seater` : "—"}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">AC</span>
-              <div className="font-semibold">{selected.ac_type || "—"}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Engine no</span>
-              <div className="font-semibold font-mono text-xs">{selected.engine_number || "—"}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Chassis no</span>
-              <div className="font-semibold font-mono text-xs">{selected.chassis_number || "—"}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Attach date</span>
-              <div className="font-semibold">{dateStr(selected.attach_date)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Sub-vendor</span>
-              <div className="font-semibold">
-                {selected.sub_vendor || "—"}
-                {selected.sub_vendor_phone ? ` · ${selected.sub_vendor_phone}` : ""}
-              </div>
-            </div>
-            <div>
-              <span className="text-slate-500">Contractual</span>
-              <div className="font-semibold">
-                {selected.contractual_name || "—"}
-                {selected.contractual_phone ? ` · ${selected.contractual_phone}` : ""}
-              </div>
-            </div>
-            <div className="sm:col-span-2">
-              <span className="text-slate-500">Account details</span>
-              <div className="font-semibold">
-                {selected.account_holder_name || selected.account_number
-                  ? [
-                      selected.account_holder_name,
-                      selected.account_number,
-                      selected.account_ifsc,
-                      selected.account_bank_name,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : "—"}
-              </div>
-            </div>
-            <div>
-              <span className="text-slate-500">GPS</span>
-              <div className="font-semibold">
-                {selected.gps_installed ? `Yes${selected.gps_vendor ? ` · ${selected.gps_vendor}` : ""}` : "No"}
-              </div>
-            </div>
-            <div>
-              <span className="text-slate-500">GPS IMEI</span>
-              <div className="font-semibold font-mono text-xs">{selected.gps_imei || "—"}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Insurance expiry</span>
-              <div className="font-semibold">{dateStr(selected.insurance_expiry)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Fitness expiry</span>
-              <div className="font-semibold">{dateStr(selected.fitness_expiry)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">PUC expiry</span>
-              <div className="font-semibold">{dateStr(selected.puc_expiry)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Tax expiry</span>
-              <div className="font-semibold">{dateStr(selected.tax_expiry)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Registered date</span>
-              <div className="font-semibold">{dateStr(selected.registered_date)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">49 expiry</span>
-              <div className="font-semibold">{dateStr(selected.form_49_expiry)}</div>
-            </div>
-            <div>
-              <span className="text-slate-500">Permit expiry</span>
-              <div className="font-semibold">{dateStr(selected.permit_expiry)}</div>
-            </div>
-          </div>
 
-          <div className="grid lg:grid-cols-2 gap-4 items-start">
-            <div className="space-y-3 min-w-0">
-              <h3 className="font-bold text-btt-navy">Documents checklist</h3>
-              {VEHICLE_DOC_SECTIONS.map((section) => {
-                const d = docsByType[section.type];
-                const active = previewDoc?.id === d?.id;
-                return (
-                  <div
-                    key={section.type}
-                    className={`rounded-2xl border-2 p-4 ${
-                      active
-                        ? "border-btt-blue bg-btt-sky/40"
-                        : !d
-                          ? section.optional
-                            ? "border-dashed border-slate-200 bg-white"
-                            : "border-slate-200 bg-slate-50"
-                          : d.status === "approved"
-                            ? "border-green-300 bg-green-50/50"
-                            : d.status === "rejected"
-                              ? "border-red-300 bg-red-50/40"
-                              : "border-amber-200 bg-amber-50/30"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="font-bold text-btt-navy">
-                          {section.title}
-                          {section.optional ? (
-                            <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
-                          ) : null}
-                        </div>
-                        <div className="text-xs text-slate-500">{section.short}</div>
-                        {d ? (
-                          <>
-                            <div className="text-sm mt-2 font-medium truncate max-w-xs sm:max-w-md">
-                              {d.original_filename}
-                            </div>
-                            <div className="text-xs mt-1 font-semibold text-slate-700">
-                              {DOC_STATUS_LABEL[d.status] || d.status}
-                              {d.expiry_date ? ` · expiry ${dateStr(d.expiry_date)}` : ""}
-                            </div>
-                            {d.rejection_note ? (
-                              <div className="text-xs text-red-700 mt-1">Note: {d.rejection_note}</div>
+              <div className="space-y-3 min-w-0">
+                <h3 className="font-bold text-btt-navy">Documents checklist</h3>
+                {VEHICLE_DOC_SECTIONS.map((section) => {
+                  const d = docsByType[section.type];
+                  const active = previewDoc?.id === d?.id;
+                  return (
+                    <div
+                      key={section.type}
+                      className={`rounded-2xl border-2 p-4 bg-white ${
+                        active
+                          ? "border-btt-blue bg-btt-sky/40"
+                          : !d
+                            ? section.optional
+                              ? "border-dashed border-slate-200"
+                              : "border-slate-200"
+                            : d.status === "approved"
+                              ? "border-green-300 bg-green-50/50"
+                              : d.status === "rejected"
+                                ? "border-red-300 bg-red-50/40"
+                                : "border-amber-200 bg-amber-50/30"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-bold text-btt-navy">
+                            {section.title}
+                            {section.optional ? (
+                              <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
                             ) : null}
-                          </>
-                        ) : (
-                          <div className="text-sm text-slate-500 mt-2">
-                            {section.optional ? "Not uploaded (optional)" : "Not uploaded"}
+                          </div>
+                          <div className="text-xs text-slate-500">{section.short}</div>
+                          {d ? (
+                            <>
+                              <div className="text-sm mt-2 font-medium truncate max-w-xs sm:max-w-md">
+                                {d.original_filename}
+                              </div>
+                              <div className="text-xs mt-1 font-semibold text-slate-700">
+                                {DOC_STATUS_LABEL[d.status] || d.status}
+                                {d.expiry_date ? ` · expiry ${dateStr(d.expiry_date)}` : ""}
+                              </div>
+                              {d.rejection_note ? (
+                                <div className="text-xs text-red-700 mt-1">Note: {d.rejection_note}</div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <div className="text-sm text-slate-500 mt-2">
+                              {section.optional ? "Not uploaded (optional)" : "Not uploaded"}
+                            </div>
+                          )}
+                        </div>
+                        {d && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="px-3 py-2 rounded-xl bg-white border text-sm font-semibold text-btt-navy"
+                              onClick={() => setPreviewDoc(d)}
+                            >
+                              Preview
+                            </button>
+                            {d.status === "pending" && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-semibold"
+                                  onClick={() => approveDoc(d.id)}
+                                >
+                                  Verify OK
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold"
+                                  onClick={() => setDocReject({ id: d.id, note: "" })}
+                                >
+                                  Reject doc
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
-                      {d && (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className="px-3 py-2 rounded-xl bg-white border text-sm font-semibold text-btt-navy"
-                            onClick={() => setPreviewDoc(d)}
-                          >
-                            Preview
-                          </button>
-                          {d.status === "pending" && (
-                            <>
-                              <button
-                                type="button"
-                                className="px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-semibold"
-                                onClick={() => approveDoc(d.id)}
-                              >
-                                Verify OK
-                              </button>
-                              <button
-                                type="button"
-                                className="px-3 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold"
-                                onClick={() => setDocReject({ id: d.id, note: "" })}
-                              >
-                                Reject doc
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                <label className="block text-sm font-bold text-slate-800">
+                  Rejection reason (required only if rejecting the whole vehicle)
+                </label>
+                <textarea
+                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base"
+                  rows={2}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Example: Insurance expired / RC unclear — please re-upload"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={approve}
+                    className="flex-1 min-w-[140px] bg-green-700 text-white px-4 py-3 rounded-xl font-bold"
+                  >
+                    Approve vehicle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reject}
+                    className="flex-1 min-w-[140px] bg-red-700 text-white px-4 py-3 rounded-xl font-bold"
+                  >
+                    Reject vehicle
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 min-h-[320px] lg:sticky lg:top-4">
-              <div className="text-sm font-bold text-btt-navy mb-2">Document preview</div>
+            <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3 min-h-[420px] xl:sticky xl:top-4 h-fit w-full min-w-0">
+              <div className="text-sm font-bold text-btt-navy mb-1">Document preview</div>
               {previewDoc ? (
                 <>
                   <div className="text-xs text-slate-600 mb-2 truncate">{previewDoc.original_filename}</div>
@@ -486,43 +472,22 @@ export default function AdminVehicleApprovals() {
                     <iframe
                       title="Document preview"
                       src={previewDoc.file_path}
-                      className="w-full h-[70vh] rounded-lg bg-white border"
+                      className="w-full h-[min(78vh,860px)] rounded-lg bg-white border"
                     />
                   ) : (
                     <img
                       src={previewDoc.file_path}
                       alt={previewDoc.original_filename || "Document"}
-                      className="w-full max-h-[70vh] object-contain rounded-lg bg-white border"
+                      className="w-full max-h-[min(78vh,860px)] object-contain rounded-lg bg-white border"
                     />
                   )}
                 </>
               ) : (
-                <div className="h-64 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg">
-                  Select <strong className="mx-1">Preview</strong> on a document
+                <div className="h-72 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg bg-white">
+                  No document selected yet
                 </div>
               )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-slate-800">
-              Rejection reason (required only if rejecting the whole vehicle)
-            </label>
-            <textarea
-              className="mt-1 w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base"
-              rows={2}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Example: Insurance expired / RC unclear — please re-upload"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={approve} className="flex-1 min-w-[140px] bg-green-700 text-white px-4 py-3 rounded-xl font-bold">
-              Approve vehicle
-            </button>
-            <button type="button" onClick={reject} className="flex-1 min-w-[140px] bg-red-700 text-white px-4 py-3 rounded-xl font-bold">
-              Reject vehicle
-            </button>
+            </aside>
           </div>
         </div>
       )}

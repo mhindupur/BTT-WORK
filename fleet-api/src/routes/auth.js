@@ -19,7 +19,7 @@ async function findUserForLogin(loginRaw) {
   if (user) return user;
   // Site Manager may log in with Site Code (alphanumeric)
   const siteCode = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (siteCode.length >= 8) {
+  if (siteCode.length >= 8 && siteCode.length <= 10) {
     user = await queryOne(
       `SELECT u.id, u.email, u.password_hash, u.role, u.full_name, u.phone, u.is_active
        FROM users u
