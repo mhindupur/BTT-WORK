@@ -493,7 +493,7 @@ export default function SmVehicles() {
   }
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto">
+    <div className="space-y-4 w-full min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-btt-navy">Vehicles</h1>
@@ -524,10 +524,10 @@ export default function SmVehicles() {
       {msg && <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
 
       {showAdd && (
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] gap-4 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start w-full">
           <form
             onSubmit={create}
-            className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-sm min-w-0"
+            className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-sm min-w-0 w-full"
           >
             <h2 className="text-lg font-bold text-btt-navy">New vehicle</h2>
             <p className="text-sm text-slate-600">
@@ -551,7 +551,6 @@ export default function SmVehicles() {
               gpsVendors={gpsVendors}
               showStatus={false}
               showExpirySection={false}
-              dense
             />
             <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
               Certificate expiry dates (insurance, fitness, PUC, tax, permit) are entered when you upload

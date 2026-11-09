@@ -31,19 +31,19 @@ export function RcBookPreviewPanel({ value }) {
   const isPdf = String(value?.rc_file?.type || "").includes("pdf") || /\.pdf($|\?)/i.test(url || "");
 
   return (
-    <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3 min-h-[320px] lg:sticky lg:top-4 h-fit">
+    <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3 min-h-[320px] xl:sticky xl:top-4 h-fit w-full min-w-0">
       <div className="text-sm font-bold text-btt-navy mb-1">RC Book preview</div>
       <p className="text-xs text-slate-500 mb-3">
         Use this pane to read the RC and fill engine number, chassis number, and other fields.
       </p>
       {url ? (
         isPdf ? (
-          <iframe title="RC preview" src={url} className="w-full h-[70vh] rounded-lg bg-white border" />
+          <iframe title="RC preview" src={url} className="w-full h-[min(78vh,820px)] rounded-lg bg-white border" />
         ) : (
           <img
             src={url}
             alt="RC Book preview"
-            className="w-full max-h-[70vh] object-contain rounded-lg bg-white border"
+            className="w-full max-h-[min(78vh,820px)] object-contain rounded-lg bg-white border"
           />
         )
       ) : (
