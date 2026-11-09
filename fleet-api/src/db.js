@@ -1,7 +1,5 @@
 import mysql from "mysql2/promise";
-import dotenv from "dotenv";
-
-dotenv.config();
+import "./loadEnv.js";
 
 function parseDatabaseUrl(url) {
   if (!url) throw new Error("DATABASE_URL is required");
