@@ -166,9 +166,13 @@ mysql -u btt -p btt_fleet < fleet-db/schema.sql
 # mysql -u btt -p btt_fleet < fleet-db/migration_007_fuel_indent_serial.sql
 # mysql -u btt -p btt_fleet < fleet-db/migration_008_site_codes_sla.sql
 # mysql -u btt -p btt_fleet < fleet-db/migration_009_account_managers.sql
+# mysql -u btt -p btt_fleet < fleet-db/migration_010_passengers_gps_vendors.sql
+# mysql -u btt -p btt_fleet < fleet-db/migration_011_drivers_expiry_reminders.sql
+# mysql -u btt -p btt_fleet < fleet-db/migration_012_vehicle_ownership_parties.sql
+# mysql -u btt -p btt_fleet < fleet-db/migration_013_sitecode8_registered_date.sql
 ```
 
-`schema.sql` already includes the latest tables (vehicles approval, OTP, vehicle types, Fleetbook detail fields, etc.).
+Fresh installs: `schema.sql` already includes current columns. On an **existing** DB after `git pull`, always apply any new `migration_0XX_*.sql` files you have not run yet (at least `migration_013_sitecode8_registered_date.sql`).
 
 ---
 
@@ -198,9 +202,18 @@ WHATSAPP_PROVIDER=stub
 
 ADMIN_EMAIL=admin@btt.fleet
 ADMIN_PASSWORD=Admin@123
+ADMIN_PHONE=+91XXXXXXXXXX
 DEMO_SM_EMAIL=supervisor@btt.fleet
 DEMO_SM_PASSWORD=Supervisor@123
+DEMO_AM_EMAIL=account@btt.fleet
+DEMO_AM_PASSWORD=Account@123
+
+# IFSC verify (IndianAPI)
+INDIANAPI_IFSC_URL=https://ifsc.indianapi.in/ifsc
+INDIANAPI_IFSC_KEY=YOUR_INDIANAPI_KEY
 ```
+
+For real admin WhatsApp OTP (not stub), set `WHATSAPP_PROVIDER=interakt` or `meta` plus the matching OTP template keys from `.env.example`.
 
 Install, seed, start with PM2:
 
@@ -346,7 +359,7 @@ cd /opt/btt/BTT-WORK
 git pull
 
 # DB migrations (only new additive files since last deploy)
-# mysql -u btt -p btt_fleet < fleet-db/migration_00X_....sql
+mysql -u btt -p btt_fleet < fleet-db/migration_013_sitecode8_registered_date.sql
 
 cd fleet-api
 npm install --omit=dev
@@ -356,6 +369,7 @@ cd ../fleet-web
 npm install
 npm run build
 # Nginx already points at dist/ — no restart needed after build
+# If the browser still shows the old UI: hard refresh / clear cache
 ```
 
 ---
