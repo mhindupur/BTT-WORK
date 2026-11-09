@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DOC_STATUS_LABEL } from "../constants/vehicleDocs";
+import { isExpiryAfterToday, minExpiryISODate } from "../utils/dateRules";
 
 function isPdfSource(file, path) {
   if (file && String(file.type || "").includes("pdf")) return true;
@@ -82,7 +83,15 @@ export default function DocUploadCard({
     });
 
     // If expiry already filled (or not required), upload immediately; keep preview until server doc loads
-    if (!section.needsExpiry || expiryValue) {
+    if (!section.needsExpiry) {
+      onUpload(file);
+      return;
+    }
+    if (expiryValue) {
+      if (!isExpiryAfterToday(expiryValue)) {
+        setLocalErr("Expiry date must be after today. Past and today are blocked.");
+        return;
+      }
       onUpload(file);
     }
   }
@@ -94,8 +103,14 @@ export default function DocUploadCard({
       setLocalErr(`Select ${section.title} expiry date from the preview, then upload.`);
       return;
     }
+    if (section.needsExpiry && !isExpiryAfterToday(expiryValue)) {
+      setLocalErr("Expiry date must be after today. Past and today are blocked.");
+      return;
+    }
     onUpload(stagedFile);
   }
+
+  const minExpiry = minExpiryISODate();
 
   function onDrop(e) {
     e.preventDefault();
@@ -148,12 +163,22 @@ export default function DocUploadCard({
               type="date"
               className="mt-1 w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base disabled:bg-slate-50"
               value={expiryValue || ""}
-              onChange={(e) => onExpiryChange?.(e.target.value)}
+              min={minExpiry}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v && !isExpiryAfterToday(v)) {
+                  setLocalErr("Expiry date must be after today. Past and today are blocked.");
+                  onExpiryChange?.("");
+                  return;
+                }
+                setLocalErr("");
+                onExpiryChange?.(v);
+              }}
               disabled={!canEdit || busy}
               required
             />
             <span className="text-xs text-slate-500 mt-1 block">
-              Read the date from the preview on the right, then select it here
+              Must be after today. Read the date from the preview on the right, then select it here.
             </span>
           </label>
         )}

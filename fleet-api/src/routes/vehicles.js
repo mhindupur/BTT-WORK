@@ -696,7 +696,17 @@ sm.post("/:id/documents", uploadDoc.single("file"), async (req, res) => {
   if (!isValidDocType(docType)) {
     return res.status(400).json({ error: `doc_type must be one of: ${VEHICLE_DOC_TYPES.join(", ")}` });
   }
-  const expiry = req.body?.expiry_date ? String(req.body.expiry_date) : null;
+  const expiry = req.body?.expiry_date ? String(req.body.expiry_date).slice(0, 10) : null;
+  if (expiry) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+      return res.status(400).json({ error: "Invalid expiry_date" });
+    }
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    if (expiry <= todayIso) {
+      return res.status(400).json({ error: "Document expiry must be after today" });
+    }
+  }
   const filePath = `/uploads/vehicles/${req.file.filename}`;
 
   // Replace previous uploads of the same type so each section has one current file

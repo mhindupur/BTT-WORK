@@ -9,6 +9,7 @@ import {
   emptyVehicleDetails,
 } from "../../constants/vehicleFields";
 import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { isExpiryAfterToday } from "../../utils/dateRules";
 import { formatRegInput, isSlaExceeded, normalizeVehicleRegistration } from "../../utils/vehicleReg";
 import {
   APPROVAL_STATUS_LABEL,
@@ -230,6 +231,9 @@ export default function SmVehicles() {
     if (!selectedId) return setErr("Select or create a vehicle first");
     if (section.needsExpiry && !expiryByType[section.type]) {
       return setErr(`Please select expiry date for ${section.title} first.`);
+    }
+    if (section.needsExpiry && !isExpiryAfterToday(expiryByType[section.type])) {
+      return setErr(`${section.title} expiry must be after today.`);
     }
     setErr("");
     setMsg("");

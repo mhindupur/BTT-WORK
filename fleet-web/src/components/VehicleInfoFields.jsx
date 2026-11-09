@@ -8,6 +8,7 @@ import {
   SEATING_OPTIONS,
   accountSectionTitle,
 } from "../constants/vehicleFields";
+import { minExpiryISODate } from "../utils/dateRules";
 
 const inputCls = "w-full border rounded-lg px-3 py-2 bg-white";
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
@@ -556,14 +557,17 @@ export default function VehicleInfoFields({
     <AccountFields value={value} set={set} title={accountSectionTitle(ownership)} />
   ) : null;
 
+  const minExpiry = minExpiryISODate();
   const expiryBlock = showExpirySection ? (
     <div>
       <div className="text-sm font-bold text-btt-navy mb-2">Certificate & permit expiry</div>
+      <p className="text-xs text-slate-500 mb-2">Expiry dates must be after today.</p>
       <div className={grid}>
         <Labeled label="Insurance expiry">
           <input
             className={inputCls}
             type="date"
+            min={minExpiry}
             value={value.insurance_expiry || ""}
             onChange={(e) => set({ insurance_expiry: e.target.value })}
           />
@@ -572,6 +576,7 @@ export default function VehicleInfoFields({
           <input
             className={inputCls}
             type="date"
+            min={minExpiry}
             value={value.fitness_expiry || ""}
             onChange={(e) => set({ fitness_expiry: e.target.value })}
           />
@@ -580,6 +585,7 @@ export default function VehicleInfoFields({
           <input
             className={inputCls}
             type="date"
+            min={minExpiry}
             value={value.puc_expiry || ""}
             onChange={(e) => set({ puc_expiry: e.target.value })}
           />
@@ -588,6 +594,7 @@ export default function VehicleInfoFields({
           <input
             className={inputCls}
             type="date"
+            min={minExpiry}
             value={value.form_49_expiry || ""}
             onChange={(e) => set({ form_49_expiry: e.target.value })}
           />
@@ -596,6 +603,7 @@ export default function VehicleInfoFields({
           <input
             className={inputCls}
             type="date"
+            min={minExpiry}
             value={value.tax_expiry || ""}
             onChange={(e) => set({ tax_expiry: e.target.value })}
           />
@@ -604,6 +612,7 @@ export default function VehicleInfoFields({
           <input
             className={inputCls}
             type="date"
+            min={minExpiry}
             value={value.permit_expiry || ""}
             onChange={(e) => set({ permit_expiry: e.target.value })}
           />
