@@ -1,0 +1,521 @@
+import { useEffect, useMemo, useState } from "react";
+import api from "../../api";
+import DonutChart from "../../components/DonutChart";
+import ListToolbar from "../../components/ListToolbar";
+import { DOC_STATUS_LABEL, VEHICLE_DOC_SECTIONS } from "../../constants/vehicleDocs";
+import { ownershipLabel } from "../../constants/vehicleFields";
+import { downloadExcel, excelStamp } from "../../utils/exportExcel";
+import { matchSearch } from "../../utils/listFilter";
+
+const APPROVAL_LABEL = {
+  approved: "Approved",
+  pending_review: "Pending review",
+  draft: "Draft",
+  rejected: "Rejected",
+};
+
+function dateStr(v) {
+  if (!v) return "—";
+  return String(v).slice(0, 10);
+}
+
+export default function AdminVehicleApprovals() {
+  const [rows, setRows] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [docs, setDocs] = useState([]);
+  const [note, setNote] = useState("");
+  const [notifications, setNotifications] = useState([]);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [docReject, setDocReject] = useState(null); // { id, note }
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [search, setSearch] = useState("");
+  const [approvalChart, setApprovalChart] = useState([]);
+
+  async function load() {
+    const [pending, notes, dash] = await Promise.all([
+      api.get("/admin/vehicles/pending-review"),
+      api.get("/admin/notifications", { params: { unread: 1 } }),
+      api.get("/admin/dashboard/summary").catch(() => ({ data: null })),
+    ]);
+    setRows(pending.data);
+    setNotifications(notes.data);
+    const segs = (dash.data?.charts?.by_approval || []).map((s) => ({
+      ...s,
+      label: APPROVAL_LABEL[s.label] || s.label,
+      color:
+        s.label === "approved"
+          ? "#16a34a"
+          : s.label === "pending_review"
+            ? "#d97706"
+            : s.label === "rejected"
+              ? "#dc2626"
+              : "#64748b",
+    }));
+    setApprovalChart(segs);
+  }
+  async function loadDocs(id) {
+    if (!id) return setDocs([]);
+    const { data } = await api.get(`/admin/vehicles/${id}/documents`);
+    setDocs(data);
+  }
+
+  useEffect(() => {
+    load().catch(console.error);
+  }, []);
+  useEffect(() => {
+    setPreviewDoc(null);
+    loadDocs(selectedId).catch(console.error);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!docs.length) {
+      setPreviewDoc(null);
+      return;
+    }
+    setPreviewDoc((prev) => {
+      if (prev && docs.some((d) => Number(d.id) === Number(prev.id))) {
+        return docs.find((d) => Number(d.id) === Number(prev.id)) || prev;
+      }
+      const pending = docs.find((d) => d.status === "pending");
+      return pending || docs[0];
+    });
+  }, [docs]);
+
+  const selected = rows.find((r) => Number(r.id) === Number(selectedId));
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) =>
+      matchSearch(r, search, [
+        "registration_number",
+        "client_name",
+        "submitted_by_name",
+        "make_model",
+        "owner_name",
+        "site_code",
+      ])
+    );
+  }, [rows, search]);
+
+  function exportPending() {
+    downloadExcel({
+      filename: `vehicle-approvals-${excelStamp()}.xlsx`,
+      sheetName: "PendingReview",
+      rows: filteredRows,
+      columns: [
+        { header: "Registration", value: (r) => r.registration_number || "" },
+        { header: "Site", value: (r) => r.client_name || "" },
+        { header: "Submitted by", value: (r) => r.submitted_by_name || "" },
+        { header: "Owner", value: (r) => r.owner_name || "" },
+        { header: "Type", value: (r) => r.make_model || r.vehicle_type_name || "" },
+        { header: "Documents", value: (r) => r.doc_count ?? "" },
+        { header: "Pending docs", value: (r) => r.pending_doc_count ?? "" },
+        {
+          header: "Submitted at",
+          value: (r) => (r.submitted_at ? String(r.submitted_at).replace("T", " ").slice(0, 16) : ""),
+        },
+      ],
+    });
+  }
+
+  const docsByType = useMemo(() => {
+    const map = {};
+    for (const d of docs) {
+      if (!map[d.doc_type]) map[d.doc_type] = d;
+    }
+    return map;
+  }, [docs]);
+
+  async function approve() {
+    if (!selectedId) return;
+    setErr("");
+    setMsg("");
+    try {
+      await api.post(`/admin/vehicles/${selectedId}/approve`);
+      setMsg("Vehicle approved. Site manager can now issue indents for this vehicle.");
+      setSelectedId(null);
+      await load();
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  async function reject() {
+    if (!selectedId) return;
+    if (!note.trim()) return setErr("Please write a short reason for rejection.");
+    setErr("");
+    setMsg("");
+    try {
+      await api.post(`/admin/vehicles/${selectedId}/reject`, { rejection_note: note.trim() });
+      setMsg("Vehicle rejected. Site manager can fix and send again.");
+      setNote("");
+      setSelectedId(null);
+      await load();
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  async function approveDoc(docId) {
+    setErr("");
+    try {
+      await api.post(`/admin/vehicles/documents/${docId}/approve`);
+      await loadDocs(selectedId);
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  async function rejectDoc() {
+    if (!docReject?.id) return;
+    if (!docReject.note?.trim()) return setErr("Write why this document is rejected.");
+    setErr("");
+    try {
+      await api.post(`/admin/vehicles/documents/${docReject.id}/reject`, {
+        rejection_note: docReject.note.trim(),
+      });
+      setDocReject(null);
+      await loadDocs(selectedId);
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    }
+  }
+
+  async function markRead(id) {
+    await api.post(`/admin/notifications/${id}/read`);
+    await load();
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h1 className="text-2xl font-bold text-btt-navy">Vehicle approvals</h1>
+        <p className="text-sm text-slate-600 mt-1">
+          Open a vehicle, check each document, then Approve or Reject. Until approved, site manager cannot assign work.
+        </p>
+      </div>
+      {err && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">{err}</div>}
+      {msg && <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{msg}</div>}
+
+      {approvalChart.length ? (
+        <div className="max-w-sm">
+          <DonutChart title="Fleet approval status" segments={approvalChart} />
+        </div>
+      ) : null}
+
+      {!!notifications.length && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <div className="font-bold text-amber-950 mb-2">New submissions ({notifications.length})</div>
+          <ul className="space-y-2 text-sm">
+            {notifications.map((n) => (
+              <li key={n.id} className="flex justify-between gap-3 items-start">
+                <div>
+                  <div className="font-semibold">{n.title}</div>
+                  <div className="text-amber-900/80">{n.body}</div>
+                </div>
+                <button type="button" className="text-xs font-semibold text-btt-accent shrink-0" onClick={() => markRead(n.id)}>
+                  Mark read
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <ListToolbar
+          title="Waiting for your review"
+          count={filteredRows.length}
+          totalCount={rows.length}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search registration, client, site manager…"
+          onExport={exportPending}
+          exportDisabled={!filteredRows.length}
+        />
+        <ul className="divide-y">
+          {filteredRows.map((r) => (
+            <li key={r.id} className={`p-4 ${Number(selectedId) === Number(r.id) ? "bg-amber-50/50" : ""}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-lg text-btt-navy">{r.registration_number}</div>
+                  <div className="text-sm text-slate-600 mt-1">
+                    By {r.submitted_by_name || "—"} · {r.client_name}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {r.doc_count} document(s) · {r.pending_doc_count} waiting check ·{" "}
+                    {r.submitted_at ? String(r.submitted_at).replace("T", " ").slice(0, 16) : ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="px-4 py-2.5 rounded-xl bg-btt-navy text-white font-semibold text-sm"
+                  onClick={() => {
+                    setSelectedId(r.id);
+                    setNote("");
+                    setErr("");
+                    setMsg("");
+                  }}
+                >
+                  Review documents
+                </button>
+              </div>
+            </li>
+          ))}
+          {!filteredRows.length && (
+            <li className="p-4 text-slate-500 text-sm">
+              {rows.length ? "No vehicles match your search." : "No vehicles waiting."}
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {selected && (
+        <div className="w-full min-w-0 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2 bg-white rounded-2xl border border-slate-200 p-4">
+            <div>
+              <h2 className="text-xl font-bold text-btt-navy">Review {selected.registration_number}</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Checklist on the left · live document preview on the right. Verify each file, then approve or reject.
+              </p>
+            </div>
+            <button type="button" className="text-sm text-slate-600 underline" onClick={() => setSelectedId(null)}>
+              Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start w-full">
+            <div className="space-y-4 min-w-0">
+              <div className="grid sm:grid-cols-2 gap-3 text-sm rounded-2xl bg-white border border-slate-200 p-4">
+                <div>
+                  <span className="text-slate-500">Serial</span>
+                  <div className="font-semibold font-mono">{selected.vehicle_serial || "—"}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Site</span>
+                  <div className="font-semibold">
+                    {selected.client_name || "—"}
+                    {selected.site_code ? ` (${selected.site_code})` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Ownership</span>
+                  <div className="font-semibold">{ownershipLabel(selected.ownership)}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Owner</span>
+                  <div className="font-semibold">
+                    {selected.owner_name || "—"}
+                    {selected.owner_phone ? ` · ${selected.owner_phone}` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Driver</span>
+                  <div className="font-semibold">
+                    {selected.driver_name || "—"}
+                    {selected.driver_phone ? ` · ${selected.driver_phone}` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Model / registered</span>
+                  <div className="font-semibold">
+                    {selected.vehicle_type_name || selected.make_model || "—"}
+                    {selected.registered_date ? ` · ${dateStr(selected.registered_date)}` : ""}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Engine no</span>
+                  <div className="font-semibold font-mono text-xs">{selected.engine_number || "—"}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Chassis no</span>
+                  <div className="font-semibold font-mono text-xs">{selected.chassis_number || "—"}</div>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-slate-500">Account / IFSC</span>
+                  <div className="font-semibold">
+                    {selected.account_holder_name || selected.account_number || selected.account_ifsc
+                      ? [
+                          selected.account_holder_name,
+                          selected.account_number,
+                          selected.account_ifsc,
+                          selected.account_bank_name,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 min-w-0">
+                <h3 className="font-bold text-btt-navy">Documents checklist</h3>
+                {VEHICLE_DOC_SECTIONS.map((section) => {
+                  const d = docsByType[section.type];
+                  const active = previewDoc?.id === d?.id;
+                  return (
+                    <div
+                      key={section.type}
+                      className={`rounded-2xl border-2 p-4 bg-white ${
+                        active
+                          ? "border-btt-blue bg-btt-sky/40"
+                          : !d
+                            ? section.optional
+                              ? "border-dashed border-slate-200"
+                              : "border-slate-200"
+                            : d.status === "approved"
+                              ? "border-green-300 bg-green-50/50"
+                              : d.status === "rejected"
+                                ? "border-red-300 bg-red-50/40"
+                                : "border-amber-200 bg-amber-50/30"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-bold text-btt-navy">
+                            {section.title}
+                            {section.optional ? (
+                              <span className="ml-2 text-xs font-semibold text-slate-500 uppercase">Optional</span>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-slate-500">{section.short}</div>
+                          {d ? (
+                            <>
+                              <div className="text-sm mt-2 font-medium truncate max-w-xs sm:max-w-md">
+                                {d.original_filename}
+                              </div>
+                              <div className="text-xs mt-1 font-semibold text-slate-700">
+                                {DOC_STATUS_LABEL[d.status] || d.status}
+                                {d.expiry_date ? ` · expiry ${dateStr(d.expiry_date)}` : ""}
+                              </div>
+                              {d.rejection_note ? (
+                                <div className="text-xs text-red-700 mt-1">Note: {d.rejection_note}</div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <div className="text-sm text-slate-500 mt-2">
+                              {section.optional ? "Not uploaded (optional)" : "Not uploaded"}
+                            </div>
+                          )}
+                        </div>
+                        {d && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="px-3 py-2 rounded-xl bg-white border text-sm font-semibold text-btt-navy"
+                              onClick={() => setPreviewDoc(d)}
+                            >
+                              Preview
+                            </button>
+                            {d.status === "pending" && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-semibold"
+                                  onClick={() => approveDoc(d.id)}
+                                >
+                                  Verify OK
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold"
+                                  onClick={() => setDocReject({ id: d.id, note: "" })}
+                                >
+                                  Reject doc
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                <label className="block text-sm font-bold text-slate-800">
+                  Rejection reason (required only if rejecting the whole vehicle)
+                </label>
+                <textarea
+                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-base"
+                  rows={2}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Example: Insurance expired / RC unclear — please re-upload"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={approve}
+                    className="flex-1 min-w-[140px] bg-green-700 text-white px-4 py-3 rounded-xl font-bold"
+                  >
+                    Approve vehicle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reject}
+                    className="flex-1 min-w-[140px] bg-red-700 text-white px-4 py-3 rounded-xl font-bold"
+                  >
+                    Reject vehicle
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3 min-h-[420px] xl:sticky xl:top-4 h-fit w-full min-w-0">
+              <div className="text-sm font-bold text-btt-navy mb-1">Document preview</div>
+              {previewDoc ? (
+                <>
+                  <div className="text-xs text-slate-600 mb-2 truncate">{previewDoc.original_filename}</div>
+                  {/\.pdf($|\?)/i.test(previewDoc.original_filename || previewDoc.file_path || "") ? (
+                    <iframe
+                      title="Document preview"
+                      src={previewDoc.file_path}
+                      className="w-full h-[min(78vh,860px)] rounded-lg bg-white border"
+                    />
+                  ) : (
+                    <img
+                      src={previewDoc.file_path}
+                      alt={previewDoc.original_filename || "Document"}
+                      className="w-full max-h-[min(78vh,860px)] object-contain rounded-lg bg-white border"
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="h-72 flex items-center justify-center text-sm text-slate-400 border border-dashed rounded-lg bg-white">
+                  No document selected yet
+                </div>
+              )}
+            </aside>
+          </div>
+        </div>
+      )}
+
+      {docReject && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3 shadow-xl">
+            <h3 className="text-lg font-bold text-btt-navy">Reject this document</h3>
+            <p className="text-sm text-slate-600">Write a short reason so the site manager knows what to fix.</p>
+            <textarea
+              className="w-full border-2 rounded-xl px-3 py-3 text-base"
+              rows={3}
+              value={docReject.note}
+              onChange={(e) => setDocReject({ ...docReject, note: e.target.value })}
+              placeholder="Example: Photo is blurry"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" className="px-4 py-2 rounded-xl border" onClick={() => setDocReject(null)}>
+                Cancel
+              </button>
+              <button type="button" className="px-4 py-2 rounded-xl bg-red-700 text-white font-semibold" onClick={rejectDoc}>
+                Reject document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

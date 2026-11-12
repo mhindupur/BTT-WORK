@@ -1,0 +1,95 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./authContext";
+import Login from "./pages/Login";
+import PublicPayment from "./pages/PublicPayment";
+import AdminLayout from "./layouts/AdminLayout";
+import SmLayout from "./layouts/SmLayout";
+import AmLayout from "./layouts/AmLayout";
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminClients from "./pages/admin/Clients";
+import AdminAccountManagers from "./pages/admin/AccountManagers";
+import AdminVehicles from "./pages/admin/Vehicles";
+import AdminIndents from "./pages/admin/Indents";
+import AdminIndentSeries from "./pages/admin/IndentSeries";
+import AdminFuel from "./pages/admin/Fuel";
+import AdminPayments from "./pages/admin/Payments";
+import AdminVehicleApprovals from "./pages/admin/VehicleApprovals";
+import AdminVehicleTypes from "./pages/admin/VehicleTypes";
+import AdminGpsVendors from "./pages/admin/GpsVendors";
+import AdminDrivers from "./pages/admin/Drivers";
+import AdminExpiryReminders from "./pages/admin/ExpiryReminders";
+import SmDashboard from "./pages/sm/SmDashboard";
+import IssueIndent from "./pages/sm/IssueIndent";
+import MyIndents from "./pages/sm/MyIndents";
+import SmVehicles from "./pages/sm/Vehicles";
+import SmDrivers from "./pages/sm/Drivers";
+import AmDashboard from "./pages/am/AmDashboard";
+import AmSites from "./pages/am/AmSites";
+import AmReports from "./pages/am/AmReports";
+
+function Guard({ role, children }) {
+  const { user, ready } = useAuth();
+  if (!ready) return <div className="p-8 text-center text-slate-500">Loading…</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (role && user.role !== role) return <Navigate to="/login" replace />;
+  return children;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/pay/:token" element={<PublicPayment />} />
+      <Route
+        path="/admin"
+        element={
+          <Guard role="admin">
+            <AdminLayout />
+          </Guard>
+        }
+      >
+        <Route index element={<AdminDashboard />} />
+        <Route path="clients" element={<AdminClients />} />
+        <Route path="site-managers" element={<Navigate to="/admin/clients" replace />} />
+        <Route path="account-managers" element={<AdminAccountManagers />} />
+        <Route path="vehicles" element={<AdminVehicles />} />
+        <Route path="vehicle-types" element={<AdminVehicleTypes />} />
+        <Route path="gps-vendors" element={<AdminGpsVendors />} />
+        <Route path="drivers" element={<AdminDrivers />} />
+        <Route path="expiry-reminders" element={<AdminExpiryReminders />} />
+        <Route path="vehicle-approvals" element={<AdminVehicleApprovals />} />
+        <Route path="indents" element={<AdminIndents />} />
+        <Route path="indent-series" element={<AdminIndentSeries />} />
+        <Route path="fuel" element={<AdminFuel />} />
+        <Route path="payments" element={<AdminPayments />} />
+      </Route>
+      <Route
+        path="/sm"
+        element={
+          <Guard role="site_manager">
+            <SmLayout />
+          </Guard>
+        }
+      >
+        <Route index element={<SmDashboard />} />
+        <Route path="vehicles" element={<SmVehicles />} />
+        <Route path="drivers" element={<SmDrivers />} />
+        <Route path="issue-indent" element={<IssueIndent />} />
+        <Route path="my-indents" element={<MyIndents />} />
+      </Route>
+      <Route
+        path="/am"
+        element={
+          <Guard role="account_manager">
+            <AmLayout />
+          </Guard>
+        }
+      >
+        <Route index element={<AmDashboard />} />
+        <Route path="sites" element={<AmSites />} />
+        <Route path="reports" element={<AmReports />} />
+      </Route>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}

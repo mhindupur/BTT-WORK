@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* NUCLICK logo color theme */
+  --btt-navy: #0b4f8c;
+  --btt-blue: #00529b;
+  --btt-green: #28b446;
+  --btt-green-dark: #1e8b38;
+  --btt-mist: #e8f6ec;
+  --btt-sky: #e7f2fa;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  overflow: hidden;
+  color: #0f172a;
+}
+
+::selection {
+  background: rgba(42, 166, 68, 0.25);
+}

@@ -1,0 +1,327 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import BrandMark from "../components/BrandMark";
+import { useAuth } from "../authContext";
+import api from "../api";
+
+export default function Login() {
+  const { login, completeAdminOtp } = useAuth();
+  const nav = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [mode, setMode] = useState("login"); // login | otp_request | otp_reset | admin_otp
+  /** create = first-time password; forgot = reset existing */
+  const [passwordSetup, setPasswordSetup] = useState(null);
+  const [adminPendingUserId, setAdminPendingUserId] = useState(null);
+  const [adminPhoneHint, setAdminPhoneHint] = useState("");
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+
+  function digits10(s) {
+    return String(s || "").replace(/\D/g, "").slice(0, 10);
+  }
+
+  function routeAfterLogin(u) {
+    if (u.role === "admin") nav("/admin");
+    else if (u.role === "account_manager") nav("/am");
+    else nav("/sm");
+  }
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      const result = await login(email, password);
+      if (result?.otp_required && result?.admin_login_pending) {
+        setAdminPendingUserId(result.user_id);
+        setAdminPhoneHint(result.phone_hint || "");
+        setMsg(result.message || "OTP sent. Enter it to complete admin sign-in.");
+        setMode("admin_otp");
+        setOtp("");
+        return;
+      }
+      routeAfterLogin(result);
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message || "Login failed");
+    }
+  }
+
+  async function onAdminOtp(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      const u = await completeAdminOtp(
+        adminPendingUserId,
+        String(otp || "").replace(/\D/g, "").slice(0, 6)
+      );
+      routeAfterLogin(u);
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message || "OTP verification failed");
+    }
+  }
+
+  async function onRequestOtp(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      await api.post("/auth/request-otp", { phone: digits10(phone) });
+      setMsg("If this phone exists for a site manager, an OTP was sent on WhatsApp.");
+      setMode("otp_reset");
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message || "Request failed");
+    }
+  }
+
+  async function onResetWithOtp(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      await api.post("/auth/reset-password-with-otp", {
+        phone: digits10(phone),
+        otp: String(otp || "").replace(/\D/g, "").slice(0, 6),
+        new_password: newPassword,
+      });
+      setMsg("Password saved. Sign in with your email and this password.");
+      setMode("login");
+      setPasswordSetup(null);
+      setOtp("");
+      setNewPassword("");
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message || "Reset failed");
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-btt-soft">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-brand border border-btt-sky p-8">
+        <BrandMark variant="full" className="mb-3 justify-center" />
+        <h1 className="sr-only">NUCLICK</h1>
+        <p className="text-slate-600 text-sm mt-2 text-center">Admin, Account Manager, or Site Manager sign-in</p>
+        {mode === "login" ? (
+          <form onSubmit={onSubmit} className="mt-6 space-y-4">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+              <strong className="text-slate-800">Site managers:</strong> sign in with{" "}
+              <strong>Site code + password</strong> (alphanumeric site code). Admin / Account Manager use email.
+              Admin sign-in also requires a WhatsApp OTP when a phone is configured.
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Email or Site code</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                type="text"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="admin@… or SITECODE01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Password</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            {msg && <p className="text-green-700 text-sm">{msg}</p>}
+            {err && <p className="text-red-600 text-sm">{err}</p>}
+            <button
+              type="submit"
+              className="w-full bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-green transition"
+            >
+              Sign in
+            </button>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                className="w-full text-sm font-medium py-2.5 rounded-lg border border-btt-blue text-btt-blue hover:bg-btt-sky"
+                onClick={() => {
+                  setPasswordSetup("create");
+                  setMode("otp_request");
+                }}
+              >
+                Site manager: Create password
+              </button>
+              <button
+                type="button"
+                className="w-full text-sm text-btt-greenDark font-medium hover:underline"
+                onClick={() => {
+                  setPasswordSetup("forgot");
+                  setMode("otp_request");
+                }}
+              >
+                Site manager: Forgot password?
+              </button>
+            </div>
+          </form>
+        ) : mode === "admin_otp" ? (
+          <form onSubmit={onAdminOtp} className="mt-6 space-y-4">
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              <strong>Admin security check.</strong> Enter the OTP sent to WhatsApp
+              {adminPhoneHint ? ` (${adminPhoneHint})` : ""}.
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">OTP</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono tracking-widest"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                required
+                placeholder="6-digit OTP"
+              />
+            </div>
+            {msg && <p className="text-green-700 text-sm">{msg}</p>}
+            {err && <p className="text-red-600 text-sm">{err}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="flex-1 border rounded-lg py-2.5"
+                onClick={() => {
+                  setMode("login");
+                  setAdminPendingUserId(null);
+                  setOtp("");
+                }}
+              >
+                Back
+              </button>
+              <button type="submit" className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg">
+                Verify &amp; sign in
+              </button>
+            </div>
+          </form>
+        ) : mode === "otp_request" ? (
+          <form onSubmit={onRequestOtp} className="mt-6 space-y-4">
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              {passwordSetup === "create" ? (
+                <>
+                  <strong>First-time setup.</strong> Enter the mobile number your admin saved for you. We’ll send an OTP
+                  on WhatsApp so you can choose your login password.
+                </>
+              ) : (
+                <>
+                  <strong>Reset password.</strong> Enter your registered mobile number. We’ll send an OTP on WhatsApp.
+                </>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Phone</label>
+              <div className="mt-1 flex">
+                <span className="inline-flex items-center px-3 rounded-l-lg border border-slate-300 bg-slate-50 text-slate-700 text-sm">
+                  +91
+                </span>
+                <input
+                  className="w-full rounded-r-lg border border-slate-300 px-3 py-2"
+                  placeholder="10-digit mobile"
+                  value={digits10(phone)}
+                  onChange={(e) => setPhone(digits10(e.target.value))}
+                  inputMode="numeric"
+                  required
+                />
+              </div>
+            </div>
+            {msg && <p className="text-green-700 text-sm">{msg}</p>}
+            {err && <p className="text-red-600 text-sm">{err}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="flex-1 border rounded-lg py-2.5 font-medium"
+                onClick={() => {
+                  setPasswordSetup(null);
+                  setMode("login");
+                }}
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-green transition"
+              >
+                Send OTP
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={onResetWithOtp} className="mt-6 space-y-4">
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              {passwordSetup === "create" ? (
+                <>
+                  Enter the OTP from WhatsApp and <strong>create your login password</strong> (min. 6 characters). Then
+                  sign in with your <strong>email</strong> and this password.
+                </>
+              ) : (
+                <>Enter the OTP from WhatsApp and choose a new password.</>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Phone</label>
+              <div className="mt-1 flex">
+                <span className="inline-flex items-center px-3 rounded-l-lg border border-slate-300 bg-slate-50 text-slate-700 text-sm">
+                  +91
+                </span>
+                <input
+                  className="w-full rounded-r-lg border border-slate-300 px-3 py-2"
+                  placeholder="10-digit mobile"
+                  value={digits10(phone)}
+                  onChange={(e) => setPhone(digits10(e.target.value))}
+                  inputMode="numeric"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">OTP</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="6-digit OTP"
+                value={String(otp || "").replace(/\D/g, "").slice(0, 6)}
+                onChange={(e) => setOtp(String(e.target.value || "").replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">
+                {passwordSetup === "create" ? "Create password" : "New password"}
+              </label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </div>
+            {msg && <p className="text-green-700 text-sm">{msg}</p>}
+            {err && <p className="text-red-600 text-sm">{err}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="flex-1 border rounded-lg py-2.5 font-medium"
+                onClick={() => setMode("otp_request")}
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                className="flex-1 bg-btt-navy text-white font-medium py-2.5 rounded-lg hover:bg-btt-green transition"
+              >
+                {passwordSetup === "create" ? "Save password" : "Reset password"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
