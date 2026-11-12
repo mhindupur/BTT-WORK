@@ -9,7 +9,7 @@
 See root [README.md](../README.md).
 
 **Active stack:** `fleet-api` (Express), `fleet-web` (Vite/React), `fleet-db` (MySQL).  
-Full setup: [PROPOSAL-APP-README.md](./PROPOSAL-APP-README.md).
+Layout: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ---
 

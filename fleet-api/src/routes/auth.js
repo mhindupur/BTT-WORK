@@ -95,18 +95,13 @@ r.post("/login", async (req, res) => {
       [user.id, e164 || String(user.phone), otpHash, expires]
     );
     await sendAuthOtpWhatsApp(user.phone, otp, { callbackData: `admin_login_otp:${user.id}` });
-    const payload = {
+    return res.json({
       otp_required: true,
       admin_login_pending: true,
       user_id: user.id,
       phone_hint: String(user.phone).replace(/.(?=.{4})/g, "•"),
       message: "OTP sent to admin WhatsApp. Enter OTP to complete sign-in.",
-    };
-    // Local/stub only: surface OTP so operators can complete login without WhatsApp
-    if ((process.env.WHATSAPP_PROVIDER || "stub").toLowerCase() === "stub") {
-      payload.dev_otp = otp;
-    }
-    return res.json(payload);
+    });
   }
 
   res.json(await buildLoginPayload(user));

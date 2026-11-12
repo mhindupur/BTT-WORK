@@ -43,28 +43,37 @@ app.use("/uploads", express.static(uploadRoot));
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", app: "btt-fleet-api" }));
 
+// Auth
 app.use("/api/auth", auth);
+
+// Admin / shared masters
 app.use("/api/clients", clients);
 app.use("/api/site-managers", siteManagers);
 app.use("/api/account-managers", accountManagers);
-app.use("/api/admin/vehicles", vehiclesAdmin);
-app.use("/api/sm/vehicles", vehiclesSm);
-app.use("/api/am", amSites);
-app.use("/api/admin/indents", indentsAdmin);
-app.use("/api/admin/indent-batches", indentBatches);
-app.use("/api/sm/indents", indentsSm);
-app.use("/api/admin/fuel", fuel);
-app.use("/api/admin/payments", paymentsAdmin);
-app.use("/api/public/payments", paymentsPublic);
-app.use("/api/admin/dashboard", dashboard);
-app.use("/api/admin/notifications", notifications);
 app.use("/api/vehicle-types", vehicleTypes);
 app.use("/api/gps-vendors", gpsVendors);
-app.use("/api/sm/dashboard", smDashboard);
-app.use("/api/admin/drivers", driversAdmin);
-app.use("/api/sm/drivers", driversSm);
+app.use("/api/admin/dashboard", dashboard);
+app.use("/api/admin/notifications", notifications);
 app.use("/api/admin/expiry-reminders", expiryReminders);
+app.use("/api/admin/vehicles", vehiclesAdmin);
+app.use("/api/admin/drivers", driversAdmin);
+app.use("/api/admin/indents", indentsAdmin);
+app.use("/api/admin/indent-batches", indentBatches);
+app.use("/api/admin/fuel", fuel);
+app.use("/api/admin/payments", paymentsAdmin);
+
+// Site manager
+app.use("/api/sm/vehicles", vehiclesSm);
+app.use("/api/sm/drivers", driversSm);
+app.use("/api/sm/indents", indentsSm);
+app.use("/api/sm/dashboard", smDashboard);
+
+// Account manager (read-only sites view)
+app.use("/api/am", amSites);
+
+// Shared utilities + public
 app.use("/api/ifsc", ifsc);
+app.use("/api/public/payments", paymentsPublic);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

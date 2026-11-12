@@ -39,13 +39,9 @@ export default function Login() {
       if (result?.otp_required && result?.admin_login_pending) {
         setAdminPendingUserId(result.user_id);
         setAdminPhoneHint(result.phone_hint || "");
-        setMsg(
-          result.dev_otp
-            ? `${result.message || "OTP sent."} (dev OTP: ${result.dev_otp})`
-            : result.message || "OTP sent. Enter it to complete admin sign-in."
-        );
+        setMsg(result.message || "OTP sent. Enter it to complete admin sign-in.");
         setMode("admin_otp");
-        setOtp(result.dev_otp || "");
+        setOtp("");
         return;
       }
       routeAfterLogin(result);
@@ -325,25 +321,6 @@ export default function Login() {
             </div>
           </form>
         )}
-        <div className="text-xs text-slate-500 mt-4 space-y-1 rounded-lg bg-slate-50 p-3 border border-slate-100">
-          <div>
-            <span className="font-medium text-slate-600">Admin</span> —{" "}
-            <code className="text-slate-800">admin@btt.fleet</code> /{" "}
-            <code className="text-slate-800">Admin@123</code>
-          </div>
-          <div>
-            <span className="font-medium text-slate-600">Supervisor / Site manager</span> —{" "}
-            <code className="text-slate-800">supervisor@btt.fleet</code> /{" "}
-            <code className="text-slate-800">Supervisor@123</code>
-          </div>
-          <div>
-            <span className="font-medium text-slate-600">Account manager</span> —{" "}
-            <code className="text-slate-800">account@btt.fleet</code> /{" "}
-            <code className="text-slate-800">Account@123</code>
-          </div>
-          <p className="text-slate-400 pt-1">Run <code className="text-slate-600">npm run seed</code> in{" "}
-            <code className="text-slate-600">fleet-api</code> after applying SQL.</p>
-        </div>
       </div>
     </div>
   );
